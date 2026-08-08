@@ -1,0 +1,56 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aud2psy"
+version = "0.1.0"
+description = "Extract psychological and acoustic features from audio (and the audio stream of video), including time-stamped transcription"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [
+    {name = "Ben Hutchinson", email = "bhutch@uoregon.edu"},
+]
+keywords = [
+    "audio features",
+    "speech",
+    "prosody",
+    "transcription",
+    "psychology",
+    "cognitive neuroscience",
+    "naturalistic stimuli",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Multimedia :: Sound/Audio :: Analysis",
+]
+dependencies = [
+    "numpy>=1.24",
+    "pandas>=1.5",
+    "librosa>=0.10",
+    "soundfile>=0.12",
+    "faster-whisper>=1.0",
+    "tqdm>=4.60",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "ipython"]
+
+[project.scripts]
+aud2psy = "aud2psy.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/hulacon/aud2psy"
+Repository = "https://github.com/hulacon/aud2psy"
+Issues = "https://github.com/hulacon/aud2psy/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
