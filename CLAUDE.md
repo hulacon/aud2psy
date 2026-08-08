@@ -139,18 +139,85 @@ numbers. Commit/push only when asked.
      original "zero changes" claim held for row identity (`time`), not
      space detection.
 
+2. **v0.1.x — no-new-deps tier** (candidates from the Aug 2026 literature
+   survey, below; per-item go-ahead still required):
+   - **`tonal` model** — key clarity, mode-majorness, chroma summary,
+     computed in ~3 s sliding windows emitted on the 2 Hz grid (librosa
+     `chroma_cqt` + Krumhansl/Temperley profile correlation, implemented
+     natively — Essentia's KeyExtractor is AGPL and its macOS arm64 wheel
+     is broken). No maintained Python tool provides key clarity — a
+     genuine niche.
+   - **`rhythm` upgrade** — pulse clarity (tempogram peak salience) + PLP
+     local tempo + a structural novelty curve (librosa recurrence matrix).
+     With `tonal`, this completes the Alluri/Toiviainen MIRtoolbox canon
+     of naturalistic-music-fMRI regressors
+     (https://pmc.ncbi.nlm.nih.gov/articles/PMC9531138/).
+   - **Recall export** — wordpool-aware post-processing of the word
+     timestamps table: fuzzy match to a supplied wordpool, emit
+     matched_item/intrusion/repetition + inter-response times; plus
+     pause/speech-rate features from VAD + word timing. Direct ask of the
+     free-recall community — the Kahana lab is building exactly this on
+     WhisperX (https://github.com/pennmem/automated_annotation), and
+     quail's transcription layer is a dead Google API.
+3. **v0.2 — torch tier**: CLAP embeddings (flagship, below) + **`beats`
+   segment-level table** via beat_this (MIT, CPU-capable,
+   https://github.com/CPJKU/beat_this — do NOT use madmom: dead upstream,
+   pinned to Python <3.10) + optionally a DEAM-trained valence/arousal
+   probe on MERT/CLAP (DEAM's dynamic emotion annotations are natively
+   2 Hz — a literal match to our default grid).
+
+### The 2 Hz question (music survey, Aug 2026)
+
+Musical properties (key, mode, meter, emotion) integrate over 1–60 s, but
+the naturalistic-music-fMRI field's standard practice is exactly our
+architecture: compute in long sliding windows, sample onto a fast frame
+grid (window ≫ hop; `Grid` already supports this). Event-shaped outputs
+(beats, chords, sections) go to segment-level tables — the transcript
+export's `onset`/`offset` pattern. Nothing about the 2-level design needs
+to change for music.
+
+### N.B. — Whisper word-timestamp accuracy
+
+Whisper-derived word timestamps (ours included) are **not
+forced-alignment grade**: published checks put WhisperX-style alignment
+at 84–93% of words within a 200 ms collar, and Montreal Forced Aligner
+remains the accuracy reference (https://arxiv.org/pdf/2406.19363).
+faster-whisper's cross-attention timestamps are a tier below WhisperX
+(which adds wav2vec2 phoneme alignment). Fine for word2psy chunking and
+fMRI-scale regressors; NOT sufficient for vocalization-onset-locked
+EEG/iEEG analyses. Documented in the README; an optional alignment
+refinement stage (MFA export now / wav2vec2 in the torch tier) is the
+deferred fix.
+
 ### Explicitly deferred (do not build without discussion)
 
 - **CLAP embeddings (v0.2 flagship)** — `clap_{i:03d}` audio +
   `clap_text_{i:03d}` text in one shared space; torch dependency arrives
   here. Coordinate column naming with psyquilt's `COMPATIBLE_SPACES`.
-- **Speaker diarization** (who is speaking when).
+- **Word-timestamp refinement** — MFA TextGrid round-trip (CPU, no torch,
+  heavy Kaldi install) or wav2vec2 alignment (torch tier). See N.B. above.
+- **Verbatim/disfluency mode** — vanilla Whisper silently deletes fillers
+  and repetitions; CrisperWhisper (https://arxiv.org/abs/2408.16589)
+  preserves them with timed filler events. Needed before anyone uses our
+  transcripts for fluency/pause-content research.
+- **Speaker diarization** (who is speaking when) — pyannote via WhisperX
+  is the community standard; torch + HF-gated weights.
 - **Prosodic-emotion models** — how a line is said vs. its content; a
-  different affective signal than word2psy's text `emotion`.
+  different affective signal than word2psy's text `emotion`. openSMILE
+  eGeMAPS is the standard feature set (non-OSI license — optional extra).
 - **SRT/VTT subtitle ingestion** as an alternate transcription input
   (useful for full-length commercial films where verbatim SRTs exist).
-- **Music-specific features** (key, mode, harmony) beyond basic
-  onset/tempo.
+- **Chords / section labeling** — chroma + key clarity capture most tonal
+  variance for regressors; deep section labelers (all-in-one) are trained
+  on pop-song form, a poor prior for film scores, with fragile deps.
+- **Audio surprisal/expectancy** — hot 2023–26 direction, no production
+  tooling; D-REX (MATLAB) could someday consume aud2psy's own exported
+  pitch/loudness columns. Watch, don't wrap.
+- **Chronset-style speech-onset latency** — validated voice-key
+  replacement (<50 ms error) with no maintained Python equivalent; only
+  relevant if single-trial RT users show up.
 
 Prior art to consult before expanding the registry: `pliers` (Yarkoni lab
-multimodal extraction), studyforrest movie annotations.
+multimodal extraction), studyforrest movie annotations, CANLab's
+narrative-annotation scoping review
+(https://github.com/canlab/narrative_feature_annotations).

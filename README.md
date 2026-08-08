@@ -41,6 +41,16 @@ aud2psy --list-models
 A wordless clip produces a zero-row transcript and `n_speech_segments: 0`
 in the sidecar — an explicit result, not an error.
 
+> **Word-timestamp accuracy.** Whisper-derived word timestamps are good
+> to roughly the 100–200 ms level, not forced-alignment level — published
+> checks put Whisper-based aligners at 84–93% of words within a 200 ms
+> collar, with Montreal Forced Aligner the accuracy reference
+> ([comparison](https://arxiv.org/pdf/2406.19363)). They are well suited
+> to chunk-level timing, fMRI-scale regressors, and word2psy piping, but
+> **not** to vocalization-onset-locked EEG/iEEG analyses or voice-key
+> reaction times. For those, refine the word onsets with a forced aligner
+> (e.g. MFA) before analysis.
+
 ## Models
 
 | Model | Level | Features |
