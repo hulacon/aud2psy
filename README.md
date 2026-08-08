@@ -34,13 +34,18 @@ aud2psy --list-models
 | File | Contents |
 |------|----------|
 | `scores_frames.csv` | one row per 0.5 s window (`time` = window center) with all frame-level features flat — psyquilt-ready |
-| `scores_transcript.csv` | one row per Whisper segment: `text`, `onset`, `offset`, `asr_confidence`, `no_speech_prob` |
+| `scores_transcript.csv` | one row per Whisper segment: `text`, `onset`, `offset`, `asr_confidence`, `no_speech_prob` — plus `median_f0` and coarse `voice_gender` (M/F, 150 Hz f0 boundary) when the `pitch` model also runs |
 | `scores_transcript_words.csv` | word-level timestamps |
 | `scores_beats.csv` | beat/downbeat events (with the `beats` model) |
 | `scores.meta.json` | provenance sidecar |
 
 A wordless clip produces a zero-row transcript and `n_speech_segments: 0`
 in the sidecar — an explicit result, not an error.
+
+`voice_gender` is a deliberately coarse cue (per-segment median pyin f0
+against the classic 150 Hz boundary): it cannot separate two same-gender
+speakers, and children's voices sit above both adult ranges. True
+speaker-identity tracking (diarization) is on the roadmap.
 
 > **Word-timestamp accuracy.** Whisper-derived word timestamps are good
 > to roughly the 100–200 ms level, not forced-alignment level — published

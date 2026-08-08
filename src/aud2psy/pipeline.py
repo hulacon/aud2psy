@@ -24,6 +24,35 @@ class ScoreResult:
     meta: dict = field(default_factory=dict)
 
 
+VOICE_GENDER_F0_HZ = 150.0  # classic adult male/female f0 boundary
+
+
+def annotate_voice_gender(transcript_df: pd.DataFrame, frames_df: pd.DataFrame, hop: float) -> None:
+    """Add median_f0 + coarse voice_gender columns to transcript segments.
+
+    Coarse M/F from per-segment median pyin f0 (median 111–114 Hz male vs
+    170–172 Hz female on the validation dialogue). Deliberately uses raw
+    f0 with NaN-aware medians, not a voiced_prob gate — window-averaged
+    voicing probability dilutes over consonants. Limits: cannot separate
+    same-gender speakers, children sit above both ranges; real speaker
+    identity needs diarization (pyannote — roadmap).
+    """
+    import warnings
+
+    med_f0, gender = [], []
+    for _, seg in transcript_df.iterrows():
+        m = (frames_df["time"] >= seg["onset"] - hop / 2) & (
+            frames_df["time"] <= seg["offset"] + hop / 2
+        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")  # all-NaN slice on unvoiced segments
+            f0 = float(np.nanmedian(frames_df.loc[m, "pitch_f0"])) if m.any() else np.nan
+        med_f0.append(round(f0, 1) if np.isfinite(f0) else np.nan)
+        gender.append("" if not np.isfinite(f0) else ("F" if f0 >= VOICE_GENDER_F0_HZ else "M"))
+    transcript_df["median_f0"] = med_f0
+    transcript_df["voice_gender"] = gender
+
+
 def get_model(name: str, **kwargs):
     """Instantiate a registered model by name (lazy import)."""
     from .cli import MODEL_REGISTRY
@@ -142,6 +171,13 @@ def score_audio(
                 "wordpool": str(wordpool),
                 **recall_summary(recall_df, pool),
             }
+
+    if (
+        transcript_df is not None and len(transcript_df)
+        and frames_df is not None and "pitch" in frame_names
+    ):
+        annotate_voice_gender(transcript_df, frames_df, hop)
+        transcribe_info["voice_gender_threshold_hz"] = VOICE_GENDER_F0_HZ
 
     meta = build_sidecar(
         input_path=path,

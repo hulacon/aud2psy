@@ -278,7 +278,18 @@ deferred fix.
   preserves them with timed filler events. Needed before anyone uses our
   transcripts for fluency/pause-content research.
 - **Speaker diarization** (who is speaking when) — pyannote via WhisperX
-  is the community standard; torch + HF-gated weights.
+  is the community standard; torch + HF-gated weights. **NEXT UP: Ben
+  asked (Aug 2026) to investigate pyannote next session** — the torch
+  barrier fell in v0.2, so remaining costs are the gated weights
+  (one-time HF license acceptance + token) and a `diarize` wrapper
+  emitting a `{stem}_speakers.csv` + a speaker column merged into the
+  transcript. Interim shipped in v0.3.1: per-segment `median_f0` +
+  coarse `voice_gender` on the transcript (validated 4/4 turns on the
+  dialogue clip: M 111–114 Hz vs F 167–172 Hz). Negative finding worth
+  remembering: zero-shot CLAP against "a man/woman speaking" captions
+  performed at chance (52%) for per-window gender — 10 s windows
+  straddle dialogue turns and CLAP encodes speaker attributes weakly;
+  don't reach for it for speaker tasks.
 - **Prosodic-emotion models** — how a line is said vs. its content; a
   different affective signal than word2psy's text `emotion`. openSMILE
   eGeMAPS is the standard feature set (non-OSI license — optional extra).

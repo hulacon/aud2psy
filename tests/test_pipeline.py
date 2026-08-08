@@ -134,3 +134,24 @@ def test_music_emotion_probe_ships_and_loads():
     assert provenance["dimensions"] == ["valence", "arousal"]
     assert provenance["checkpoint"] == "laion/larger_clap_music_and_speech"
     assert "cv" in provenance and "arousal" in provenance["cv"]
+
+
+def test_annotate_voice_gender():
+    from aud2psy.pipeline import annotate_voice_gender
+
+    transcript = pd.DataFrame({
+        "text": ["male line", "female line", "unvoiced"],
+        "onset": [0.0, 3.0, 6.0],
+        "offset": [2.0, 5.0, 7.0],
+    })
+    frames = pd.DataFrame({
+        "time": np.arange(0.25, 7.5, 0.5),
+        "pitch_f0": [115, 118, 112, np.nan,          # segment 1: male
+                     np.nan, np.nan, 205, 198, 210,  # segment 2: female
+                     np.nan, np.nan, np.nan, np.nan, np.nan, np.nan],
+    })
+    annotate_voice_gender(transcript, frames, hop=0.5)
+    assert list(transcript["voice_gender"]) == ["M", "F", ""]
+    assert transcript["median_f0"][0] == 115
+    assert transcript["median_f0"][1] == 205
+    assert np.isnan(transcript["median_f0"][2])
