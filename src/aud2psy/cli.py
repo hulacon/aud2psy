@@ -15,6 +15,8 @@ MODEL_REGISTRY: dict[str, tuple[str, str, str]] = {
     "pitch": ("aud2psy.models.pitch", "PitchModel", "pYIN fundamental frequency and voicing probability"),
     "spectral": ("aud2psy.models.spectral", "SpectralModel", "Centroid, bandwidth, rolloff, flux, zero-crossing rate"),
     "onsets": ("aud2psy.models.onsets", "OnsetsModel", "Onset strength, onset rate, local tempo"),
+    "tonal": ("aud2psy.models.tonal", "TonalModel", "Key clarity, mode-majorness, chroma entropy (3 s windows)"),
+    "rhythm": ("aud2psy.models.rhythm", "RhythmModel", "Pulse clarity, local pulse strength, structural novelty"),
     "speech": ("aud2psy.models.speech", "SpeechModel", "Speech presence probability (Silero VAD)"),
     "transcribe": ("aud2psy.models.transcribe", "TranscribeModel", "Time-stamped transcript export for word2psy (faster-whisper)"),
 }
@@ -48,6 +50,10 @@ def build_parser() -> argparse.ArgumentParser:
                         help="faster-whisper model for transcribe (default: large-v3)")
     parser.add_argument("--language", default=None, metavar="CODE",
                         help="transcription language code (default: auto-detect)")
+    parser.add_argument("--wordpool", default=None, metavar="PATH",
+                        help="wordpool file (one item per line) for free-recall "
+                             "annotation; requires the transcribe model and adds "
+                             "a _recall.csv output")
     parser.add_argument("--list-models", action="store_true", help="list registered models and exit")
     parser.add_argument("--version", action="version", version=_version())
     return parser
@@ -87,6 +93,8 @@ def main(argv: list[str] | None = None) -> int:
     unknown = [m for m in models if m not in MODEL_REGISTRY]
     if unknown:
         parser.error(f"unknown model(s): {', '.join(unknown)} (see --list-models)")
+    if args.wordpool and "transcribe" not in models:
+        parser.error("--wordpool requires the transcribe model")
 
     from .exceptions import Aud2PsyError
     from .pipeline import save_result, score_audio
@@ -98,6 +106,7 @@ def main(argv: list[str] | None = None) -> int:
             hop=args.hop,
             whisper_model=args.whisper_model,
             language=args.language,
+            wordpool=args.wordpool,
         )
     except Aud2PsyError as exc:
         print(f"error: {exc}", file=sys.stderr)

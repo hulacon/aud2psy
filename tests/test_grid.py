@@ -58,3 +58,13 @@ def test_rate_empty():
 def test_bad_hop_raises():
     with pytest.raises(ValueError):
         Grid.for_duration(1.0, 0.0)
+
+
+def test_window_max():
+    grid = Grid(hop=1.0, n_windows=3)
+    times = np.array([0.1, 0.6, 1.2, 2.5])
+    values = np.array([1.0, 3.0, np.nan, 7.0])
+    out = grid.window_max(times, values)
+    assert out[0] == 3.0
+    assert np.isnan(out[1])  # only a NaN native frame -> empty window
+    assert out[2] == 7.0

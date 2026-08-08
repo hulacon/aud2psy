@@ -19,6 +19,7 @@ class ScoreResult:
     frames_df: pd.DataFrame | None  # time + features; the psyquilt-ready table
     transcript_df: pd.DataFrame | None  # raw Whisper segments, for word2psy
     words_df: pd.DataFrame | None  # word-level timestamps
+    recall_df: pd.DataFrame | None = None  # wordpool-annotated recall
     meta: dict = field(default_factory=dict)
 
 
@@ -39,6 +40,7 @@ def score_audio(
     hop: float = 0.5,
     whisper_model: str = "large-v3",
     language: str | None = None,
+    wordpool: str | Path | None = None,
     show_progress: bool = True,
 ) -> ScoreResult:
     """Run the named models on one audio/video file."""
@@ -82,7 +84,7 @@ def score_audio(
             }
         frames_df = pd.DataFrame(columns)
 
-    transcript_df = words_df = None
+    transcript_df = words_df = recall_df = None
     if do_transcribe:
         y_16k = load_audio(path, WHISPER_SR)
         if duration is None:
@@ -96,6 +98,16 @@ def score_audio(
             "columns": list(transcript_df.columns),
             "runtime_sec": round(time.time() - t_model, 2),
         }
+        from .recall import annotate_recall, load_wordpool, recall_summary, speech_timing
+
+        transcribe_info["speech_timing"] = speech_timing(words_df, duration)
+        if wordpool is not None:
+            pool = load_wordpool(wordpool)
+            recall_df = annotate_recall(words_df, pool)
+            transcribe_info["recall"] = {
+                "wordpool": str(wordpool),
+                **recall_summary(recall_df, pool),
+            }
 
     meta = build_sidecar(
         input_path=path,
@@ -108,7 +120,13 @@ def score_audio(
         transcribe_info=transcribe_info,
         total_runtime_sec=round(time.time() - t0, 2),
     )
-    return ScoreResult(frames_df=frames_df, transcript_df=transcript_df, words_df=words_df, meta=meta)
+    return ScoreResult(
+        frames_df=frames_df,
+        transcript_df=transcript_df,
+        words_df=words_df,
+        recall_df=recall_df,
+        meta=meta,
+    )
 
 
 def save_result(result: ScoreResult, out_path: str | Path) -> dict[str, Path]:
@@ -133,6 +151,9 @@ def save_result(result: ScoreResult, out_path: str | Path) -> dict[str, Path]:
     if result.words_df is not None:
         written["transcript_words"] = Path(f"{stem}_transcript_words.csv")
         result.words_df.to_csv(written["transcript_words"], index=False, float_format="%.6g")
+    if result.recall_df is not None:
+        written["recall"] = Path(f"{stem}_recall.csv")
+        result.recall_df.to_csv(written["recall"], index=False, float_format="%.6g")
     meta_path = Path(f"{stem}.meta.json")
     result.meta["output"] = {
         kind: {"path": str(p), "rows": _n_rows(result, kind)} for kind, p in written.items()
@@ -148,5 +169,6 @@ def _n_rows(result: ScoreResult, kind: str) -> int:
         "frames": result.frames_df,
         "transcript": result.transcript_df,
         "transcript_words": result.words_df,
+        "recall": result.recall_df,
     }[kind]
     return len(df)

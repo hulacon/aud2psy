@@ -48,6 +48,21 @@ class Grid:
         np.divide(sums, counts, out=out, where=counts > 0)
         return out
 
+    def window_max(self, times: np.ndarray, values: np.ndarray) -> np.ndarray:
+        """Max of native ``values`` in each grid window (NaN where empty).
+
+        For oscillating curves (e.g. a pulse curve) whose window *mean* is
+        uninformative — the peak is the signal.
+        """
+        times = np.asarray(times, dtype=float)
+        values = np.asarray(values, dtype=float)
+        idx = np.clip((times / self.hop).astype(int), 0, self.n_windows - 1)
+        valid = ~np.isnan(values)
+        out = np.full(self.n_windows, -np.inf)
+        np.maximum.at(out, idx[valid], values[valid])
+        out[np.isinf(out)] = np.nan
+        return out
+
     def rate(self, event_times: np.ndarray) -> np.ndarray:
         """Events per second in each grid window (e.g. onset rate)."""
         event_times = np.asarray(event_times, dtype=float)

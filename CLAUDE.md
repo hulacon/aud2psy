@@ -61,9 +61,19 @@ an audio–text embedding space the way viz2psy's `clip` and word2psy's
   `pitch` (pyin f0 in 65–2093 Hz, voiced_prob; f0 NaN when unvoiced),
   `spectral` (centroid, bandwidth, rolloff, flux = half-wave-rectified STFT
   L2 flux, zcr), `onsets` (strength, rate via `Grid.rate` on
-  `onset_detect` events, framewise tempo), `speech` (`speech_prob`: real
-  per-32ms Silero VAD probabilities via faster-whisper's bundled ONNX model
-  — no Whisper weights; resamples 22050→16k internally). Segment level:
+  `onset_detect` events, framewise tempo), `tonal` (key clarity /
+  majorness / chroma entropy: chroma_cqt smoothed over 3 s, correlated
+  against the 24 Krumhansl–Kessler profiles; NaN on silence), `rhythm`
+  (pulse clarity: beat-lag-restricted local autocorrelation of the
+  **mean-removed** onset envelope — without mean removal a quasi-constant
+  envelope autocorrelates everywhere and noise beats a click track —
+  gated to 0 where onset activity < 0.1 log-mel-flux units, which is
+  loudness-invariant; beat strength: `Grid.window_max` of the PLP curve,
+  since an oscillating pulse curve's window *mean* is uninformative;
+  novelty: Foote checkerboard on an MFCC cosine SSM at 0.2 s frames),
+  `speech` (`speech_prob`: real per-32ms Silero VAD probabilities via
+  faster-whisper's bundled ONNX model — no Whisper weights; resamples
+  22050→16k internally). Segment level:
   `transcribe` (faster-whisper, `word_timestamps=True`, `vad_filter=True`
   against hallucination on wordless audio, CPU/int8; `asr_confidence` =
   exp(avg_logprob)). Wordless clips → zero-row transcript +
@@ -77,6 +87,14 @@ an audio–text embedding space the way viz2psy's `clip` and word2psy's
   no_speech_prob — pipes into `word2psy --text-column text`),
   `scores_transcript_words.csv` (word-level timestamps),
   `scores.meta.json`.
+- **`recall.py`** — free-recall export (not a model; runs with
+  `--wordpool` + `transcribe`): exact-then-fuzzy (difflib, threshold .8)
+  matching of the word-timestamp table against a wordpool file, emitting
+  `{stem}_recall.csv` (word/onset/offset/matched_item/pool_index/
+  match_score/intrusion/repetition/irt; `irt` = time between successive
+  *matched* recalls, the list-recall convention — intrusions don't
+  advance it). `speech_timing` summary (latency to first word, speech
+  rate, pauses ≥ 0.5 s) lands in the sidecar on every transcribe run.
 - **`metadata.py`** — sidecar builder (version, input, per-model columns +
   runtimes, frames hop/n, transcription config incl. detected language and
   n_speech_segments).
@@ -139,26 +157,36 @@ numbers. Commit/push only when asked.
      original "zero changes" claim held for row identity (`time`), not
      space detection.
 
-2. **v0.1.x — no-new-deps tier** (candidates from the Aug 2026 literature
-   survey, below; per-item go-ahead still required):
-   - **`tonal` model** — key clarity, mode-majorness, chroma summary,
-     computed in ~3 s sliding windows emitted on the 2 Hz grid (librosa
-     `chroma_cqt` + Krumhansl/Temperley profile correlation, implemented
-     natively — Essentia's KeyExtractor is AGPL and its macOS arm64 wheel
-     is broken). No maintained Python tool provides key clarity — a
-     genuine niche.
-   - **`rhythm` upgrade** — pulse clarity (tempogram peak salience) + PLP
-     local tempo + a structural novelty curve (librosa recurrence matrix).
-     With `tonal`, this completes the Alluri/Toiviainen MIRtoolbox canon
-     of naturalistic-music-fMRI regressors
-     (https://pmc.ncbi.nlm.nih.gov/articles/PMC9531138/).
-   - **Recall export** — wordpool-aware post-processing of the word
-     timestamps table: fuzzy match to a supplied wordpool, emit
-     matched_item/intrusion/repetition + inter-response times; plus
-     pause/speech-rate features from VAD + word timing. Direct ask of the
-     free-recall community — the Kahana lab is building exactly this on
-     WhisperX (https://github.com/pennmem/automated_annotation), and
-     quail's transcription layer is a dead Google API.
+2. **v0.1.1 — no-new-deps tier** (done Aug 2026; motivated by the
+   literature survey below): `tonal` + `rhythm` frame models (the
+   Alluri/Toiviainen MIRtoolbox regressor canon,
+   https://pmc.ncbi.nlm.nih.gov/articles/PMC9531138/ — no maintained
+   Python tool provided key/pulse clarity; implemented natively on
+   librosa, dodging Essentia's AGPL + broken macOS arm64 wheel) and the
+   free-recall export (the Kahana lab is building the same thing on
+   WhisperX, https://github.com/pennmem/automated_annotation). Design
+   details in Architecture. Tests: 50 offline + 3 marked. Validation
+   (Aug 2026, synthetic stimuli):
+   - *tonal*: C-major vs C-minor triads → majorness +.12 / −.32 with key
+     clarity .85/.91 vs .46 on white noise; chroma entropy 1.00 on noise.
+     The A-minor-ish wordless clip lands majorness −.03 (its pitch-class
+     set is genuinely major/minor-ambiguous), key clarity .51 vs .38 for
+     dialogue.
+   - *rhythm*: pulse clarity separates the 120-BPM wordless clip (.61)
+     from dialogue (.23) and, on ground-truth signals, click track .57 >
+     white noise .23 > steady tone/silence .00 (the tone case required
+     mean-removing the onset envelope and gating by onset activity —
+     first drafts ranked noise *above* the click track). Novelty peaks
+     within one window of a known 6.0 s texture boundary at 16× baseline.
+   - *recall*: 8-word spoken list (`say`, one intrusion, one repetition)
+     → 8/8 words matched correctly through large-v3: 6 unique recalls,
+     the intrusion caught (best pool match .364 < .8 threshold), the
+     repetition flagged, IRTs on the clip timeline (mean 1.94 s) with the
+     intrusion correctly not advancing IRT; sidecar speech timing:
+     7 pauses ≥ .5 s, speech rate .65 wps.
+   - *psyquilt*: detects 7 profile spaces on the 20-column frames CSV
+     (per-model + 19-d acoustic; registry extended in psyquilt,
+     committed there).
 3. **v0.2 — torch tier**: CLAP embeddings (flagship, below) + **`beats`
    segment-level table** via beat_this (MIT, CPU-capable,
    https://github.com/CPJKU/beat_this — do NOT use madmom: dead upstream,

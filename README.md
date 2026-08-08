@@ -59,6 +59,8 @@ in the sidecar — an explicit result, not an error.
 | `pitch` | frame | `pitch_f0` (pYIN, NaN when unvoiced), `pitch_voiced_prob` |
 | `spectral` | frame | `spectral_centroid`, `spectral_bandwidth`, `spectral_rolloff`, `spectral_flux`, `spectral_zcr` |
 | `onsets` | frame | `onsets_strength`, `onsets_rate`, `onsets_tempo` |
+| `tonal` | frame | `tonal_key_clarity`, `tonal_majorness`, `tonal_chroma_entropy` (Krumhansl profiles, 3 s windows) |
+| `rhythm` | frame | `rhythm_pulse_clarity`, `rhythm_beat_strength`, `rhythm_novelty` (Foote section novelty) |
 | `speech` | frame | `speech_prob` (Silero VAD) |
 | `transcribe` | segment | time-stamped transcript export (faster-whisper, default `large-v3`; `--whisper-model` to change) |
 
@@ -73,6 +75,24 @@ word2psy --all scores_transcript.csv --text-column text -o words.csv
 
 The transcript's `onset`/`offset` columns pass through into word2psy's
 chunks output, so every text feature stays on the clip's timeline.
+
+## Free-recall annotation
+
+For spoken free-recall recordings, supply a wordpool (one item per line)
+to get an automated annotation — the hand-scoring workflow of tools like
+Penn-TotalRecall, automated:
+
+```bash
+aud2psy transcribe recall_session.wav --wordpool pool.txt -o scores.csv
+```
+
+This adds `scores_recall.csv`: one row per spoken word with
+`matched_item` (exact-then-fuzzy match against the pool), `pool_index`,
+`match_score`, `intrusion`, `repetition`, and `irt` (inter-response time
+between successive matched recalls). The sidecar gains recall summary
+counts and speech-timing metrics (latency to first word, speech rate,
+pause statistics). Mind the word-timestamp caveat above: onsets are
+fMRI/behavior-grade, not EEG-grade.
 
 ## License
 

@@ -63,3 +63,25 @@ def test_transcribe_silence_is_zero_rows(tmp_path):
     assert written["transcript"].read_text().strip() == (
         "segment_idx,text,onset,offset,asr_confidence,no_speech_prob"
     )
+
+
+def test_recall_wordpool_end_to_end(tmp_path):
+    """Spoken word list -> transcribe -> wordpool annotation."""
+    wav = make_speech_wav(
+        tmp_path, text="apple [[slnc 800]] banana [[slnc 800]] guitar [[slnc 800]] apple"
+    )
+    pool_file = tmp_path / "pool.txt"
+    pool_file.write_text("apple\nbanana\ncherry\ndolphin\n")
+    result = score_audio(
+        wav, ["transcribe"], whisper_model=WHISPER_TEST_MODEL, wordpool=pool_file
+    )
+    recall = result.recall_df
+    assert recall is not None and len(recall) == 4
+    matched = recall[~recall["intrusion"]]
+    assert set(matched["matched_item"]) == {"apple", "banana"}
+    assert recall["intrusion"].sum() == 1  # guitar is not in the pool
+    assert recall["repetition"].sum() == 1  # second apple
+    assert (matched["irt"].dropna() > 0).all()
+    info = result.meta["transcription"]
+    assert info["recall"]["n_recalled_unique"] == 2
+    assert info["speech_timing"]["n_words"] == 4
