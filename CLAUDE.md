@@ -73,7 +73,18 @@ an audio–text embedding space the way viz2psy's `clip` and word2psy's
   novelty: Foote checkerboard on an MFCC cosine SSM at 0.2 s frames),
   `speech` (`speech_prob`: real per-32ms Silero VAD probabilities via
   faster-whisper's bundled ONNX model — no Whisper weights; resamples
-  22050→16k internally). Segment level:
+  22050→16k internally), `clap` (v0.2 flagship: 512-d L2-normalized
+  LAION-CLAP embeddings, default checkpoint
+  `laion/larger_clap_music_and_speech`, 10 s context windows strided at
+  the grid hop, batched, MPS with CPU fallback; declares `input_sr =
+  48000` so the pipeline decodes at full bandwidth — transformers ≥ 5
+  returns ModelOutput objects, the 512-d projection is `pooler_output`.
+  **Shared space with word2psy's `clap_text`** (same checkpoint) — do not
+  change checkpoint/normalization/naming without coordinating word2psy
+  and psyquilt's `COMPATIBLE_SPACES`). Event level: `beats` (beat_this,
+  optional `[beats]` extra since it's a git dep — madmom is dead
+  upstream; CPU inference; one row per beat with `is_downbeat`, sidecar
+  gets n_beats/n_downbeats/median tempo). Segment level:
   `transcribe` (faster-whisper, `word_timestamps=True`, `vad_filter=True`
   against hallucination on wordless audio, CPU/int8; `asr_confidence` =
   exp(avg_logprob)). Wordless clips → zero-row transcript +
@@ -187,12 +198,23 @@ numbers. Commit/push only when asked.
    - *psyquilt*: detects 7 profile spaces on the 20-column frames CSV
      (per-model + 19-d acoustic; registry extended in psyquilt,
      committed there).
-3. **v0.2 — torch tier**: CLAP embeddings (flagship, below) + **`beats`
-   segment-level table** via beat_this (MIT, CPU-capable,
-   https://github.com/CPJKU/beat_this — do NOT use madmom: dead upstream,
-   pinned to Python <3.10) + optionally a DEAM-trained valence/arousal
-   probe on MERT/CLAP (DEAM's dynamic emotion annotations are natively
-   2 Hz — a literal match to our default grid).
+3. **v0.2 — torch tier** (done Aug 2026): `clap` frame embeddings +
+   `beats` event table; torch/transformers now core deps (word2psy gained
+   `clap_text`, psyquilt's COMPATIBLE_SPACES gained the clap pairs — both
+   committed in their repos). The DEAM valence/arousal probe was
+   deliberately held back for its own design checkpoint (dataset download
+   + training/validation protocol). Validation (Aug 2026):
+   - *clap*: 20 s clip → 40×512 unit-norm embeddings in 5.6 s on MPS
+     (~1.7 min per 6-min clip). Cross-modal retrieval, mean-pooled clip
+     embeddings vs word2psy `clap_text` captions: 3/3 diagonal — dialogue
+     ↔ "two people having a conversation" .334 (next best .138), music ↔
+     "a melody with a steady drum beat" .222 (.068), synthetic rain ↔
+     "rain falling" .286 (.128).
+   - *beats*: 120-BPM wordless clip → 41 beats, inter-beat interval
+     .500 ± .000 s, median tempo 120.0 BPM exactly.
+   - *psyquilt cross mode end-to-end*: `psyquilt matrices
+     clap_frames.csv captions_chunks.csv` emits a 30×3
+     `clap__x__clap_text__cosine` matrix.
 
 ### The 2 Hz question (music survey, Aug 2026)
 
@@ -219,9 +241,10 @@ deferred fix.
 
 ### Explicitly deferred (do not build without discussion)
 
-- **CLAP embeddings (v0.2 flagship)** — `clap_{i:03d}` audio +
-  `clap_text_{i:03d}` text in one shared space; torch dependency arrives
-  here. Coordinate column naming with psyquilt's `COMPATIBLE_SPACES`.
+- **DEAM valence/arousal probe** — dynamic musical emotion at DEAM's
+  native 2 Hz, as a linear probe on CLAP (or MERT) embeddings. Needs the
+  DEAM dataset download and a training/validation protocol — bring a
+  design to the checkpoint before building.
 - **Word-timestamp refinement** — MFA TextGrid round-trip (CPU, no torch,
   heavy Kaldi install) or wav2vec2 alignment (torch tier). See N.B. above.
 - **Verbatim/disfluency mode** — vanilla Whisper silently deletes fillers

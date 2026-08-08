@@ -20,6 +20,7 @@ class ScoreResult:
     transcript_df: pd.DataFrame | None  # raw Whisper segments, for word2psy
     words_df: pd.DataFrame | None  # word-level timestamps
     recall_df: pd.DataFrame | None = None  # wordpool-annotated recall
+    beats_df: pd.DataFrame | None = None  # beat/downbeat events
     meta: dict = field(default_factory=dict)
 
 
@@ -41,6 +42,7 @@ def score_audio(
     whisper_model: str = "large-v3",
     language: str | None = None,
     wordpool: str | Path | None = None,
+    clap_model: str | None = None,
     show_progress: bool = True,
 ) -> ScoreResult:
     """Run the named models on one audio/video file."""
@@ -55,38 +57,70 @@ def score_audio(
     unknown = [m for m in models if m not in MODEL_REGISTRY]
     if unknown:
         raise KeyError(f"Unknown model(s): {unknown}; see --list-models")
-    frame_names = [m for m in models if m != "transcribe"]
+    frame_names = [m for m in models if m not in ("transcribe", "beats")]
     do_transcribe = "transcribe" in models
+    do_beats = "beats" in models
 
-    y_feat = None
+    audio_cache: dict[int, np.ndarray] = {}
+
+    def audio_at(sr: int) -> np.ndarray:
+        if sr not in audio_cache:
+            audio_cache[sr] = load_audio(path, sr)
+        return audio_cache[sr]
+
     grid = None
     duration = None
     frames_df = None
+    beats_df = None
     model_meta: dict[str, dict] = {}
     transcribe_info: dict = {}
+    beats_info: dict = {}
+
+    if frame_names or do_beats:
+        duration = len(audio_at(FEATURE_SR)) / FEATURE_SR
 
     if frame_names:
-        y_feat = load_audio(path, FEATURE_SR)
-        duration = len(y_feat) / FEATURE_SR
         grid = Grid.for_duration(duration, hop)
         columns: dict[str, np.ndarray] = {"time": grid.centers}
         for name in tqdm(frame_names, desc="models", disable=not show_progress):
-            model = get_model(name)
+            kwargs = {"checkpoint": clap_model} if name == "clap" and clap_model else {}
+            model = get_model(name, **kwargs)
             t_model = time.time()
             model.load()
-            features = model.extract(y_feat, FEATURE_SR, grid)
+            model_sr = model.input_sr or FEATURE_SR
+            features = model.extract(audio_at(model_sr), model_sr, grid)
             model.unload()
             for feat, values in features.items():
                 columns[feat] = values
-            model_meta[name] = {
-                "columns": list(features),
-                "runtime_sec": round(time.time() - t_model, 2),
-            }
+            names = list(features)
+            if len(names) > 16:  # embeddings: record the pattern, not 512 names
+                model_meta[name] = {
+                    "pattern": f"{name}_{{NNN}}",
+                    "range": [0, len(names) - 1],
+                    "count": len(names),
+                    "runtime_sec": round(time.time() - t_model, 2),
+                }
+            else:
+                model_meta[name] = {
+                    "columns": names,
+                    "runtime_sec": round(time.time() - t_model, 2),
+                }
         frames_df = pd.DataFrame(columns)
+
+    if do_beats:
+        model = get_model("beats")
+        t_model = time.time()
+        model.load()
+        beats_df, beats_info = model.detect(audio_at(FEATURE_SR), FEATURE_SR)
+        model.unload()
+        model_meta["beats"] = {
+            "columns": list(beats_df.columns),
+            "runtime_sec": round(time.time() - t_model, 2),
+        }
 
     transcript_df = words_df = recall_df = None
     if do_transcribe:
-        y_16k = load_audio(path, WHISPER_SR)
+        y_16k = audio_at(WHISPER_SR)
         if duration is None:
             duration = len(y_16k) / WHISPER_SR
         model = get_model("transcribe", whisper_model=whisper_model, language=language)
@@ -118,6 +152,7 @@ def score_audio(
         model_meta=model_meta,
         whisper_model=whisper_model if do_transcribe else None,
         transcribe_info=transcribe_info,
+        beats_info=beats_info,
         total_runtime_sec=round(time.time() - t0, 2),
     )
     return ScoreResult(
@@ -125,6 +160,7 @@ def score_audio(
         transcript_df=transcript_df,
         words_df=words_df,
         recall_df=recall_df,
+        beats_df=beats_df,
         meta=meta,
     )
 
@@ -154,6 +190,9 @@ def save_result(result: ScoreResult, out_path: str | Path) -> dict[str, Path]:
     if result.recall_df is not None:
         written["recall"] = Path(f"{stem}_recall.csv")
         result.recall_df.to_csv(written["recall"], index=False, float_format="%.6g")
+    if result.beats_df is not None:
+        written["beats"] = Path(f"{stem}_beats.csv")
+        result.beats_df.to_csv(written["beats"], index=False, float_format="%.6g")
     meta_path = Path(f"{stem}.meta.json")
     result.meta["output"] = {
         kind: {"path": str(p), "rows": _n_rows(result, kind)} for kind, p in written.items()
@@ -170,5 +209,6 @@ def _n_rows(result: ScoreResult, kind: str) -> int:
         "transcript": result.transcript_df,
         "transcript_words": result.words_df,
         "recall": result.recall_df,
+        "beats": result.beats_df,
     }[kind]
     return len(df)

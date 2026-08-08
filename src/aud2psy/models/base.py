@@ -18,9 +18,21 @@ After extraction the pipeline records ``feature_names_`` on the instance.
 from __future__ import annotations
 
 
+def auto_device() -> str:
+    """cuda -> mps -> cpu, mirroring the word2psy/viz2psy convention."""
+    import torch
+
+    if torch.cuda.is_available():
+        return "cuda"
+    if torch.backends.mps.is_available():
+        return "mps"
+    return "cpu"
+
+
 class BaseModel:
     name: str = "base"
-    level: str = "frame"  # "frame" or "segment"
+    level: str = "frame"  # "frame", "segment", or "events"
+    input_sr: int | None = None  # frame models: decode rate override (e.g. CLAP's 48 kHz)
 
     def load(self) -> None:
         """Load weights/resources. Called once before extraction."""

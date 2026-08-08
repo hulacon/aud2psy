@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aud2psy"
-version = "0.1.1"
+version = "0.2.0"
 description = "Extract psychological and acoustic features from audio (and the audio stream of video), including time-stamped transcription"
 readme = "README.md"
 license = "MIT"
@@ -39,10 +39,14 @@ dependencies = [
     "soundfile>=0.12",
     "faster-whisper>=1.0",
     "tqdm>=4.60",
+    "torch>=2.0",
+    "transformers>=4.35",
 ]
 
 [project.optional-dependencies]
 dev = ["pytest", "ipython"]
+# beat_this is not on PyPI; the git reference keeps this an opt-in extra
+beats = ["beat_this @ git+https://github.com/CPJKU/beat_this"]
 
 [project.scripts]
 aud2psy = "aud2psy.cli:main"
@@ -59,5 +63,6 @@ where = ["src"]
 testpaths = ["tests"]
 markers = [
     "transcription: needs Whisper weights (downloads on cold cache) and macOS `say`",
+    "weights: needs large model downloads (CLAP ~2 GB, beat_this checkpoint)",
 ]
-addopts = "-m 'not transcription'"
+addopts = "-m 'not transcription and not weights'"

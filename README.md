@@ -36,6 +36,7 @@ aud2psy --list-models
 | `scores_frames.csv` | one row per 0.5 s window (`time` = window center) with all frame-level features flat — psyquilt-ready |
 | `scores_transcript.csv` | one row per Whisper segment: `text`, `onset`, `offset`, `asr_confidence`, `no_speech_prob` |
 | `scores_transcript_words.csv` | word-level timestamps |
+| `scores_beats.csv` | beat/downbeat events (with the `beats` model) |
 | `scores.meta.json` | provenance sidecar |
 
 A wordless clip produces a zero-row transcript and `n_speech_segments: 0`
@@ -62,6 +63,8 @@ in the sidecar — an explicit result, not an error.
 | `tonal` | frame | `tonal_key_clarity`, `tonal_majorness`, `tonal_chroma_entropy` (Krumhansl profiles, 3 s windows) |
 | `rhythm` | frame | `rhythm_pulse_clarity`, `rhythm_beat_strength`, `rhythm_novelty` (Foote section novelty) |
 | `speech` | frame | `speech_prob` (Silero VAD) |
+| `clap` | frame | `clap_000`…`clap_511`: LAION-CLAP audio embeddings in a shared space with word2psy's `clap_text` (10 s windows; `--clap-model` to change checkpoint) |
+| `beats` | events | beat/downbeat table (`time`, `is_downbeat`) via [beat_this](https://github.com/CPJKU/beat_this); needs `pip install "aud2psy[beats]"` |
 | `transcribe` | segment | time-stamped transcript export (faster-whisper, default `large-v3`; `--whisper-model` to change) |
 
 ## Piping the transcript into word2psy
@@ -75,6 +78,19 @@ word2psy --all scores_transcript.csv --text-column text -o words.csv
 
 The transcript's `onset`/`offset` columns pass through into word2psy's
 chunks output, so every text feature stays on the clip's timeline.
+
+## Cross-modal audio–text comparison
+
+`clap` audio embeddings share a space with word2psy's `clap_text`
+(same LAION-CLAP checkpoint), so soundtrack windows can be compared
+directly to captions or transcript chunks — and psyquilt pairs the two
+automatically in cross mode:
+
+```bash
+aud2psy clap clip.mp4 -o audio.csv
+word2psy clap_text captions.csv --text-column caption -o text.csv
+psyquilt matrices audio_frames.csv text_chunks.csv -o out/
+```
 
 ## Free-recall annotation
 

@@ -18,6 +18,8 @@ MODEL_REGISTRY: dict[str, tuple[str, str, str]] = {
     "tonal": ("aud2psy.models.tonal", "TonalModel", "Key clarity, mode-majorness, chroma entropy (3 s windows)"),
     "rhythm": ("aud2psy.models.rhythm", "RhythmModel", "Pulse clarity, local pulse strength, structural novelty"),
     "speech": ("aud2psy.models.speech", "SpeechModel", "Speech presence probability (Silero VAD)"),
+    "clap": ("aud2psy.models.clap", "ClapModel", "512-d CLAP audio embeddings (shared space with word2psy clap_text)"),
+    "beats": ("aud2psy.models.beats", "BeatsModel", "Beat/downbeat event table (beat_this; needs the [beats] extra)"),
     "transcribe": ("aud2psy.models.transcribe", "TranscribeModel", "Time-stamped transcript export for word2psy (faster-whisper)"),
 }
 
@@ -48,6 +50,9 @@ def build_parser() -> argparse.ArgumentParser:
                              "matching viz2psy's video frame interval)")
     parser.add_argument("--whisper-model", default="large-v3", metavar="NAME",
                         help="faster-whisper model for transcribe (default: large-v3)")
+    parser.add_argument("--clap-model", default=None, metavar="NAME",
+                        help="CLAP checkpoint for the clap model (default: "
+                             "laion/larger_clap_music_and_speech)")
     parser.add_argument("--language", default=None, metavar="CODE",
                         help="transcription language code (default: auto-detect)")
     parser.add_argument("--wordpool", default=None, metavar="PATH",
@@ -67,9 +72,9 @@ def _version() -> str:
 
 def list_models() -> None:
     width = max(len(n) for n in MODEL_REGISTRY)
+    levels = {"transcribe": "segment", "beats": "events "}
     for name, (_, _, desc) in MODEL_REGISTRY.items():
-        level = "segment" if name == "transcribe" else "frame  "
-        print(f"{name:<{width}}  {level}  {desc}")
+        print(f"{name:<{width}}  {levels.get(name, 'frame  ')}  {desc}")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -88,6 +93,15 @@ def main(argv: list[str] | None = None) -> int:
         if models:
             parser.error("--all replaces explicit model names; give just the input file")
         models = list(MODEL_REGISTRY)
+        import importlib.util
+
+        if importlib.util.find_spec("beat_this") is None:
+            print(
+                "note: skipping beats (optional dependency not installed; "
+                'pip install "aud2psy[beats]")',
+                file=sys.stderr,
+            )
+            models.remove("beats")
     if not models:
         parser.error("no models requested; name models before the input file or use --all")
     unknown = [m for m in models if m not in MODEL_REGISTRY]
@@ -107,6 +121,7 @@ def main(argv: list[str] | None = None) -> int:
             whisper_model=args.whisper_model,
             language=args.language,
             wordpool=args.wordpool,
+            clap_model=args.clap_model,
         )
     except Aud2PsyError as exc:
         print(f"error: {exc}", file=sys.stderr)
