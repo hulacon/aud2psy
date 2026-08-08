@@ -1,0 +1,31 @@
+{
+  "dataset": "DEAM (Aljanaki, Yang, & Soleymani, 2017)",
+  "source": "https://cvml.unige.ch/databases/DEAM/",
+  "checkpoint": "laion/larger_clap_music_and_speech",
+  "window_sec": 10.0,
+  "train_stride_sec": 2.0,
+  "n_samples": 26198,
+  "n_songs": 1746,
+  "dimensions": [
+    "valence",
+    "arousal"
+  ],
+  "ridge_alphas": [
+    0.01,
+    0.01
+  ],
+  "cv": {
+    "valence": {
+      "pooled_r": 0.706,
+      "rmse": 0.169,
+      "mean_song_r": 0.064
+    },
+    "arousal": {
+      "pooled_r": 0.838,
+      "rmse": 0.156,
+      "mean_song_r": 0.113
+    }
+  },
+  "cv_protocol": "5-fold GroupKFold by song",
+  "trained_at": "2026-08-08T23:21:31+00:00"
+}

@@ -52,6 +52,13 @@ class ClapModel(BaseModel):
         self.__dict__.pop("processor", None)
 
     def extract(self, y: np.ndarray, sr: int, grid) -> dict[str, np.ndarray]:
+        out = self.embed_windows(y, sr, grid.centers)
+        return {f"clap_{i:03d}": out[:, i] for i in range(EMBED_DIM)}
+
+    def embed_windows(self, y: np.ndarray, sr: int, centers: np.ndarray) -> np.ndarray:
+        """(len(centers), 512) unit-norm embeddings of 10 s windows centered
+        on ``centers`` (edge-clamped). Shared by `clap`, `music_emotion`,
+        and the DEAM training script."""
         import torch
         from tqdm import tqdm
 
@@ -59,12 +66,12 @@ class ClapModel(BaseModel):
         duration = len(y) / sr
         n_win = int(min(len(y), WINDOW_SEC * sr))
         starts = []
-        for center in grid.centers:
+        for center in centers:
             start = min(max(center - half, 0.0), max(duration - WINDOW_SEC, 0.0))
             starts.append(int(start * sr))
         windows = [y[s : s + n_win] for s in starts]
 
-        out = np.empty((grid.n_windows, EMBED_DIM))
+        out = np.empty((len(centers), EMBED_DIM))
         batches = range(0, len(windows), BATCH_SIZE)
         for b in tqdm(batches, desc="clap windows", leave=False):
             chunk = windows[b : b + BATCH_SIZE]
@@ -78,4 +85,4 @@ class ClapModel(BaseModel):
             emb = result.pooler_output if hasattr(result, "pooler_output") else result
             emb = emb / emb.norm(dim=-1, keepdim=True)
             out[b : b + len(chunk)] = emb.cpu().numpy()
-        return {f"clap_{i:03d}": out[:, i] for i in range(EMBED_DIM)}
+        return out

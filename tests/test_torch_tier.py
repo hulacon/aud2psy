@@ -47,3 +47,17 @@ def test_beats_on_click_track(wav_factory):
     ibis = np.diff(beats_df["time"])
     assert np.abs(ibis - 0.5).max() < 0.06
     assert set(beats_df.columns) == {"time", "is_downbeat"}
+
+
+def test_music_emotion_on_music_vs_silence():
+    from aud2psy.models.music_emotion import MusicEmotionModel
+
+    grid = Grid.for_duration(4.0, 0.5)
+    model = MusicEmotionModel(device="cpu")
+    model.load()
+    out = model.extract(sine(220, 4.0, sr=48000), 48000, grid)
+    assert set(out) == {"music_emotion_valence", "music_emotion_arousal"}
+    for v in out.values():
+        assert v.shape == (8,)
+        assert np.isfinite(v).all()
+        assert (np.abs(v) <= 1.0).all()

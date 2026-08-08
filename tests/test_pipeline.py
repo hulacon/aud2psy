@@ -122,3 +122,15 @@ def test_registry_modules_all_exist():
     for name, (module_path, class_name, _) in MODEL_REGISTRY.items():
         cls = getattr(importlib.import_module(module_path), class_name)
         assert cls.name == name
+
+
+def test_music_emotion_probe_ships_and_loads():
+    # offline: the committed probe artifact is well-formed
+    from aud2psy.models.music_emotion import load_probe
+
+    coef, intercept, provenance = load_probe()
+    assert coef.shape == (2, 512)
+    assert intercept.shape == (2,)
+    assert provenance["dimensions"] == ["valence", "arousal"]
+    assert provenance["checkpoint"] == "laion/larger_clap_music_and_speech"
+    assert "cv" in provenance and "arousal" in provenance["cv"]

@@ -81,7 +81,14 @@ an audio–text embedding space the way viz2psy's `clip` and word2psy's
   returns ModelOutput objects, the 512-d projection is `pooler_output`.
   **Shared space with word2psy's `clap_text`** (same checkpoint) — do not
   change checkpoint/normalization/naming without coordinating word2psy
-  and psyquilt's `COMPATIBLE_SPACES`). Event level: `beats` (beat_this,
+  and psyquilt's `COMPATIBLE_SPACES`), `music_emotion` (DEAM-trained
+  ridge probe applied to CLAP embeddings → `music_emotion_valence` /
+  `music_emotion_arousal` in [-1, 1]; the fitted probe ships as package
+  data `data/music_emotion_probe.{npz,json}` — ~4 KB coefficient matrix
+  plus provenance with CV numbers — reproduced by
+  `scripts/train_deam_probe.py`; embeddings are recomputed even when
+  `clap` also runs, a known deferred optimization). Event level: `beats`
+  (beat_this,
   optional `[beats]` extra since it's a git dep — madmom is dead
   upstream; CPU inference; one row per beat with `is_downbeat`, sidecar
   gets n_beats/n_downbeats/median tempo). Segment level:
@@ -239,12 +246,31 @@ EEG/iEEG analyses. Documented in the README; an optional alignment
 refinement stage (MFA export now / wav2vec2 in the torch tier) is the
 deferred fix.
 
+4. **v0.3 — music_emotion probe** (done Aug 2026): design checkpoint
+   decisions — probe on CLAP (not MERT), RidgeCV per dimension (the
+   word2psy norms recipe), 45-s excerpts only, 2 s training stride,
+   ship fitted coefficients as package data, name `music_emotion_*`
+   (Ben's call over `affect_*`; `emotion_*` would collide with
+   word2psy's GoEmotions profile in psyquilt), separate psyquilt profile
+   NOT folded into the 19-d acoustic. Trained on 26,198 windows from
+   1,746 songs (~20 min embed on MPS, cached at
+   `~/.cache/aud2psy/deam/`). **Song-level 5-fold GroupKFold CV: pooled
+   r = .706 valence / .838 arousal** (above the .4–.6 / .6–.7 literature
+   anchors), RMSE .169/.156. **Within-song curve-tracking r is only
+   .06/.11 — but diagnostics show this is mostly a dataset ceiling**:
+   DEAM's median within-song annotation SD is .026–.029 vs .23–.28
+   between songs, so ~99% of the dynamic variance the probe can learn is
+   between-song. Interpretation for users: `music_emotion` discriminates
+   affective *levels* between clips and between section-sized textures
+   within a film clip; it is not a beat-to-beat affect tracker. A
+   temporal model (LSTM/transformer over embedding sequences) is the
+   documented upgrade path if within-excerpt dynamics ever matter.
+
 ### Explicitly deferred (do not build without discussion)
 
-- **DEAM valence/arousal probe** — dynamic musical emotion at DEAM's
-  native 2 Hz, as a linear probe on CLAP (or MERT) embeddings. Needs the
-  DEAM dataset download and a training/validation protocol — bring a
-  design to the checkpoint before building.
+- **Temporal music-emotion model** — sequence model over CLAP embeddings
+  for within-excerpt affect dynamics (see v0.3 finding above); only
+  worth it with a use case in hand, given DEAM's within-song ceiling.
 - **Word-timestamp refinement** — MFA TextGrid round-trip (CPU, no torch,
   heavy Kaldi install) or wav2vec2 alignment (torch tier). See N.B. above.
 - **Verbatim/disfluency mode** — vanilla Whisper silently deletes fillers

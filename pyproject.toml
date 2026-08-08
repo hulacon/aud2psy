@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aud2psy"
-version = "0.2.0"
+version = "0.3.0"
 description = "Extract psychological and acoustic features from audio (and the audio stream of video), including time-stamped transcription"
 readme = "README.md"
 license = "MIT"
@@ -58,6 +58,9 @@ Issues = "https://github.com/hulacon/aud2psy/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+aud2psy = ["data/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

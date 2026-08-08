@@ -19,6 +19,7 @@ MODEL_REGISTRY: dict[str, tuple[str, str, str]] = {
     "rhythm": ("aud2psy.models.rhythm", "RhythmModel", "Pulse clarity, local pulse strength, structural novelty"),
     "speech": ("aud2psy.models.speech", "SpeechModel", "Speech presence probability (Silero VAD)"),
     "clap": ("aud2psy.models.clap", "ClapModel", "512-d CLAP audio embeddings (shared space with word2psy clap_text)"),
+    "music_emotion": ("aud2psy.models.music_emotion", "MusicEmotionModel", "Musical valence/arousal (DEAM-trained probe on CLAP)"),
     "beats": ("aud2psy.models.beats", "BeatsModel", "Beat/downbeat event table (beat_this; needs the [beats] extra)"),
     "transcribe": ("aud2psy.models.transcribe", "TranscribeModel", "Time-stamped transcript export for word2psy (faster-whisper)"),
 }

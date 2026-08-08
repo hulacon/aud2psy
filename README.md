@@ -64,6 +64,7 @@ in the sidecar — an explicit result, not an error.
 | `rhythm` | frame | `rhythm_pulse_clarity`, `rhythm_beat_strength`, `rhythm_novelty` (Foote section novelty) |
 | `speech` | frame | `speech_prob` (Silero VAD) |
 | `clap` | frame | `clap_000`…`clap_511`: LAION-CLAP audio embeddings in a shared space with word2psy's `clap_text` (10 s windows; `--clap-model` to change checkpoint) |
+| `music_emotion` | frame | `music_emotion_valence`, `music_emotion_arousal` in [−1, 1]: DEAM-trained probe on CLAP embeddings. Discriminates affective levels between clips/sections (held-out song-level r = .71/.84); not a beat-to-beat tracker |
 | `beats` | events | beat/downbeat table (`time`, `is_downbeat`) via [beat_this](https://github.com/CPJKU/beat_this); needs `pip install "aud2psy[beats]"` |
 | `transcribe` | segment | time-stamped transcript export (faster-whisper, default `large-v3`; `--whisper-model` to change) |
 
