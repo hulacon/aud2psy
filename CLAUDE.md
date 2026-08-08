@@ -37,7 +37,61 @@ an audio–text embedding space the way viz2psy's `clip` and word2psy's
 
 ## Architecture (`src/aud2psy/`)
 
-*(skeleton — to be filled in as v0.1 lands; design checkpoint pending)*
+- **`audio.py`** — input decoding. `.wav` reads via librosa/soundfile; every
+  other supported extension (audio: .mp3/.m4a/.flac/.ogg; video:
+  .mp4/.mov/.mkv/.webm) funnels through ffmpeg to a temp wav (`-vn -ac 1
+  -ar <sr>`). Two sample rates: 22050 Hz for features (`FEATURE_SR`),
+  16 kHz for Whisper/VAD (`WHISPER_SR`); the pipeline decodes once per rate
+  actually needed.
+- **`grid.py`** — the shared frame grid. `Grid.for_duration(duration, hop)`;
+  window k covers [k·hop, (k+1)·hop), `time` = window center. Models compute
+  at librosa native resolution then reduce with `Grid.average` (NaN-aware
+  mean — unvoiced pyin frames excluded, all-NaN windows stay NaN) or
+  `Grid.rate` (events/sec, used for onset rate).
+- **`models/base.py`** — `BaseModel` with class attrs `name` + `level`.
+  Frame models implement `extract(y, sr, grid) -> dict[str, np.ndarray]`
+  (arrays of length `grid.n_windows`); the segment model implements
+  `transcribe(y_16k, sr)`. `load()` is lazy; `unload()` frees weights.
+  **Feature keys are model-prefixed** (`loudness_rms`, `spectral_centroid`)
+  — the word2psy chunk-model convention; psyquilt's `PROFILE_REGISTRY`
+  pattern-matches these (entries `loudness`/`pitch`/`spectral`/`onsets` +
+  combined `acoustic` were added to psyquilt in Aug 2026 — coordinate any
+  renaming with that registry).
+- **`models/`** — frame level: `loudness` (rms, db — dB of window-mean RMS),
+  `pitch` (pyin f0 in 65–2093 Hz, voiced_prob; f0 NaN when unvoiced),
+  `spectral` (centroid, bandwidth, rolloff, flux = half-wave-rectified STFT
+  L2 flux, zcr), `onsets` (strength, rate via `Grid.rate` on
+  `onset_detect` events, framewise tempo), `speech` (`speech_prob`: real
+  per-32ms Silero VAD probabilities via faster-whisper's bundled ONNX model
+  — no Whisper weights; resamples 22050→16k internally). Segment level:
+  `transcribe` (faster-whisper, `word_timestamps=True`, `vad_filter=True`
+  against hallucination on wordless audio, CPU/int8; `asr_confidence` =
+  exp(avg_logprob)). Wordless clips → zero-row transcript +
+  `n_speech_segments: 0` in the sidecar: an explicit result, not an error.
+- **`pipeline.py`** — `score_audio(path, models, hop, whisper_model,
+  language) -> ScoreResult(frames_df, transcript_df, words_df, meta)`;
+  models load/extract/unload one at a time. `save_result` writes the
+  family file set for `-o scores.csv`: `scores_frames.csv` (time +
+  features flat — the psyquilt-ready file), `scores_transcript.csv`
+  (raw Whisper segments: segment_idx/text/onset/offset/asr_confidence/
+  no_speech_prob — pipes into `word2psy --text-column text`),
+  `scores_transcript_words.csv` (word-level timestamps),
+  `scores.meta.json`.
+- **`metadata.py`** — sidecar builder (version, input, per-model columns +
+  runtimes, frames hop/n, transcription config incl. detected language and
+  n_speech_segments).
+- **`cli.py`** — `MODEL_REGISTRY` maps name → (module path, class name,
+  description); lazy imports keep `--help`/`--list-models` fast (a test
+  asserts librosa/faster_whisper/pandas are not imported for `--help`).
+  Usage: `aud2psy <models...> clip.mp4 -o scores.csv`, `--all`, `--hop`
+  (default **0.5 s**, 1:1 with viz2psy video frames), `--whisper-model`
+  (default **large-v3**), `--language`, `--list-models`. No `-o` → frames
+  CSV to stdout.
+- **`tests/`** — offline synthetic suite (sine/noise/silence with
+  closed-form ground truth per feature; 35 tests, ~3 s); transcription
+  tests behind the `transcription` marker (deselected by default via
+  `addopts`; they synthesize speech with macOS `say` and use Whisper
+  `small` to stay light).
 
 ## Dev environment
 
@@ -59,14 +113,31 @@ numbers. Commit/push only when asked.
 
 ## Roadmap
 
-1. **v0.1 — acoustic tier + transcription export** (design checkpoint
-   opened Aug 2026): frame-level `loudness`, `pitch`, `spectral`, `onsets`,
-   `speech` (VAD); segment-level `transcribe` (faster-whisper, word-level
-   timestamps, no-speech flagging); video-audio extraction via ffmpeg;
-   CLI + registry + sidecar; offline synthetic tests. Validation targets:
-   a dialogue clip transcribed and piped through word2psy end-to-end with
-   sensible timing; a wordless clip cleanly flagged no-speech with
-   plausible loudness/onset curves; psyquilt auto-detects aud2psy spaces.
+1. **v0.1 — acoustic tier + transcription export** (done Aug 2026):
+   everything in the Architecture section above. Checkpoint decisions:
+   default `--hop` 0.5 s (1:1 with viz2psy frames), default Whisper
+   **large-v3** (Ben's call over `small`; ~1.4× real time on this CPU at
+   int8), transcript rows = raw Whisper segments (no sentence regroup).
+   Tests: 35 offline synthetic (~3 s) + 2 behind the `transcription`
+   marker. Validation (all Aug 2026, synthetic stimuli):
+   - *(a) dialogue*: 16.7 s two-voice `say` dialogue muxed into .mp4 →
+     `--all` → all 4 turns transcribed verbatim, onsets tracking the
+     0.6 s turn gaps (0 / 3.2 / 7.6 / 11.6 s); transcript piped through
+     `word2psy --text-column text`: 4 chunks with onset/offset passthrough
+     intact and face-valid sentiment (the flood-warning line maxes
+     negative at .83). Note: Whisper computes `asr_confidence` /
+     `no_speech_prob` per 30 s decode window, so clips under 30 s show
+     one shared value across segments — upstream behavior.
+   - *(b) wordless*: 20 s synthetic 120-BPM melody+percussion clip →
+     0 transcript rows, `n_speech_segments: 0`, max speech_prob .047;
+     onsets_rate 1.95/s vs 2.0 ground truth, median tempo 117.5 vs 120
+     BPM, loudness tracks the synthesized crescendo (r = .99).
+   - *(c) psyquilt*: `psyquilt spaces dialogue_frames.csv` detects 5
+     profile spaces (loudness/pitch/spectral/onsets + 13-d acoustic).
+     This needed a PROFILE_REGISTRY addition in psyquilt (committed
+     there), matched by aud2psy's model-prefixed column naming — the
+     original "zero changes" claim held for row identity (`time`), not
+     space detection.
 
 ### Explicitly deferred (do not build without discussion)
 

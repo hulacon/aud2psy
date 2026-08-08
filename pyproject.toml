@@ -54,3 +54,10 @@ Issues = "https://github.com/hulacon/aud2psy/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "transcription: needs Whisper weights (downloads on cold cache) and macOS `say`",
+]
+addopts = "-m 'not transcription'"
