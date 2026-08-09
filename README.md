@@ -73,6 +73,7 @@ speaker-identity tracking, use the `diarize` model (below).
 | `speech` | frame | `speech_prob` (Silero VAD) |
 | `clap` | frame | `clap_000`…`clap_511`: LAION-CLAP audio embeddings in a shared space with word2psy's `clap_text` (10 s windows; `--clap-model` to change checkpoint) |
 | `music_emotion` | frame | `music_emotion_valence`, `music_emotion_arousal` in [−1, 1]: DEAM-trained probe on CLAP embeddings. Discriminates affective levels between clips/sections (held-out song-level r = .71/.84); not a beat-to-beat tracker |
+| `sound_events` | frame | `sound_events_speech`, `_music`, `_singing`, `_laughter`, `_crying`, `_shouting`, `_crowd`, `_applause`, `_footsteps`, `_vehicle`, `_water`, `_wind`, `_animals`, `_gunshot_explosion`, `_siren_alarm`, `_thunder`: zero-shot cosine scores of each 10 s window against a text prompt bank in the CLAP space (see below) |
 | `speech_emotion` | frame | `speech_emotion_valence`, `_arousal`, `_dominance` (~0–1): vocal affect from [audeering's wav2vec2 MSP-Podcast model](https://huggingface.co/audeering/wav2vec2-large-robust-12-ft-emotion-msp-dim) in 4 s windows; NaN where the window isn't speech (Silero-gated). Weights are CC-BY-NC-SA (research use) |
 | `egemaps` | frame | the 25 [eGeMAPS](https://audeering.github.io/opensmile/) v02 low-level descriptors via openSMILE: `egemaps_loudness`, spectral balance (`_alpha_ratio`, `_hammarberg`, `_slope_0_500`, `_slope_500_1500`, `_flux`), `_mfcc1`–`4`, and a voiced set (`_f0_semitone`, `_jitter`, `_shimmer`, `_hnr`, `_h1_h2`, `_h1_a3`, formant `_f1/f2/f3_freq/_bw/_amp`) that is NaN off-speech (Silero-gated); needs `pip install "aud2psy[egemaps]"` |
 | `beats` | events | beat/downbeat table (`time`, `is_downbeat`) via [beat_this](https://github.com/CPJKU/beat_this); needs `pip install "aud2psy[beats]"` |
@@ -237,6 +238,25 @@ aud2psy clap clip.mp4 -o audio.csv
 word2psy clap_text captions.csv --text-column caption -o text.csv
 psyquilt matrices audio_frames.csv text_chunks.csv -o out/
 ```
+
+## Sound-event tags (sound_events)
+
+AudioSet-style scene/event regressors — laughter, music presence,
+crowds, sirens, gunshots — with no extra weights: each category is a
+small ensemble of text prompts embedded by the same CLAP checkpoint the
+`clap` model uses, and every window is scored by cosine similarity.
+The sidecar records the full prompt bank, so the CSV is
+self-documenting.
+
+Read the scores as *relative* tag strengths: compare a column over time
+or between clips. Columns have different baselines (an artifact of
+zero-shot prompting), so comparing *across* categories is ordinal at
+best — and the values are similarities, not calibrated probabilities.
+Two recorded limits: CLAP zero-shot performs at chance for speaker
+attributes (the bank deliberately contains none), and categories should
+be validated on stimuli like yours before interpretation —
+`scripts/validate_sound_events.py` prints per-category separation on
+synthetic target stimuli and profiles any real clips you pass it.
 
 ## Free-recall annotation
 

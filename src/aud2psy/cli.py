@@ -22,6 +22,7 @@ MODEL_REGISTRY: dict[str, tuple[str, str, str]] = {
     "speech": ("aud2psy.models.speech", "SpeechModel", "Speech presence probability (Silero VAD)"),
     "clap": ("aud2psy.models.clap", "ClapModel", "512-d CLAP audio embeddings (shared space with word2psy clap_text)"),
     "music_emotion": ("aud2psy.models.music_emotion", "MusicEmotionModel", "Musical valence/arousal (DEAM-trained probe on CLAP)"),
+    "sound_events": ("aud2psy.models.sound_events", "SoundEventsModel", "16 zero-shot scene/event tags (CLAP prompt bank: laughter, music, sirens, ...)"),
     "speech_emotion": ("aud2psy.models.speech_emotion", "SpeechEmotionModel", "Vocal arousal/dominance/valence (wav2vec2 MSP-Podcast; VAD-gated)"),
     "egemaps": ("aud2psy.models.egemaps", "EgemapsModel", "25 eGeMAPS prosody/voice-quality LLDs (openSMILE; needs the [egemaps] extra)"),
     "beats": ("aud2psy.models.beats", "BeatsModel", "Beat/downbeat event table (beat_this; needs the [beats] extra)"),

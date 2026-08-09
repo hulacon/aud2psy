@@ -104,7 +104,23 @@ an audio–text embedding space the way viz2psy's `clip` and word2psy's
   data `data/music_emotion_probe.{npz,json}` — ~4 KB coefficient matrix
   plus provenance with CV numbers — reproduced by
   `scripts/train_deam_probe.py`; embeddings are recomputed even when
-  `clap` also runs, a known deferred optimization), `speech_emotion`
+  `clap` also runs, a known deferred optimization), `sound_events`
+  (16 zero-shot event tags — speech/music/singing/laughter/crying/
+  shouting/crowd/applause/footsteps/vehicle/water/wind/animals/
+  gunshot_explosion/siren_alarm/thunder — scored as **raw cosine** of
+  each CLAP audio window against per-category prompt ensembles
+  (3 prompts each, mean-then-renormalize) embedded by the same
+  checkpoint at `load()`; subclasses ClapModel like music_emotion so
+  weights load once; softmax over the bank was rejected: it couples
+  columns to bank composition, forces co-occurring film events to
+  compete, and CLAP's logit scale makes it near-one-hot; per-column
+  baselines differ so cross-column comparison is ordinal at best —
+  documented in the sidecar, which records the full prompt bank; no
+  speaker-attribute categories (the recorded gender-at-chance negative
+  finding); failed categories are deleted from PROMPT_BANK, which
+  changes nothing else under raw cosine;
+  `scripts/validate_sound_events.py` = per-category validation),
+  `speech_emotion`
   (audeering `wav2vec2-large-robust-12-ft-emotion-msp-dim` →
   `speech_emotion_valence`/`_arousal`/`_dominance` in the model's native
   ~0–1 (deliberately NOT rescaled — music_emotion's [-1,1] comes from its
@@ -538,12 +554,23 @@ in a forced aligner themselves.
       total with roughness); offline suite grows ~32 s (module-scoped
       fixtures share every mosqito call).
 
-### Next (approved Aug 2026)
-
-- **v0.10 — endgame trio finale**: `sound_events` (zero-shot CLAP
-  prompt bank, 16 categories, raw-cosine scoring; fall back to BEATs
-  (MIT) if zero-shot underperforms Ben's local validation). After this
-  the registry is considered complete pending real-user demand.
+11. **v0.10.0 — sound_events** (done Aug 2026, closing the endgame
+    trio): 16 zero-shot event tags against the existing CLAP space —
+    design details in Architecture. **The registry is now considered
+    complete pending real-user demand.** Checkpoint decisions (Ben,
+    Aug 2026): raw cosine over softmax, the proposed 16-category bank
+    unchanged, checkpoint fixed (not coupled to `--clap-model`).
+    IMPORTANT validation caveat: the implementation container had no
+    HuggingFace egress, so **no real-embedding numbers exist yet** —
+    offline tests cover the scoring machinery (ensemble math, cosine
+    identities, column naming, sidecar) with mocked embeddings; the
+    `weights`-marked test + `scripts/validate_sound_events.py`
+    (synthetic rain/siren/alarm/wind/thunder/gunshots/applause/music
+    targets + tone/noise/silence controls, plus real-clip profiling for
+    the 9 unsynthesizable human-sound categories) are the per-category
+    validation Ben runs locally; drop rule: delete failing categories
+    from PROMPT_BANK (a no-op for other columns under raw cosine); fall
+    back to BEATs (MIT) if zero-shot underperforms broadly.
 
 ### Explicitly deferred (do not build without discussion)
 
