@@ -71,7 +71,10 @@ an audio–text embedding space the way viz2psy's `clip` and word2psy's
   loudness-invariant; beat strength: `Grid.window_max` of the PLP curve,
   since an oscillating pulse curve's window *mean* is uninformative;
   novelty: Foote checkerboard on an MFCC cosine SSM at 0.2 s frames),
-  `speech` (`speech_prob`: real per-32ms Silero VAD probabilities via
+  `timbre` (MFCCs 1–13 — c0 excluded as loudness_db's job, the
+  encoding-model convention — plus 7-band per-octave spectral contrast
+  and spectral flatness; frontend constants shared with `spectral` so
+  native frames align), `speech` (`speech_prob`: real per-32ms Silero VAD probabilities via
   faster-whisper's bundled ONNX model — no Whisper weights; resamples
   22050→16k internally), `clap` (v0.2 flagship: 512-d L2-normalized
   LAION-CLAP embeddings, default checkpoint
@@ -476,21 +479,35 @@ in a forced aligner themselves.
      minutes per clip. Trailing junk segments carry asr_confidence
      .33–.39 vs .90 for real speech — the documented filter handle.
 
+9. **v0.8.0 — timbre** (done Aug 2026; first of the endgame trio from
+   the Aug 2026 survey: CANLab scoping review, Giordano et al. 2023
+   Nat Neurosci, pliers): MFCCs 1–13 (c0 excluded — window log-energy
+   is loudness_db's job, and encoding models conventionally drop it),
+   7-band per-octave spectral contrast, spectral flatness. Frontend
+   constants match `spectral.py` so native frames align;
+   `egemaps_mfcc1–4` coexist by design (different mel frontend — the
+   loudness_rms/egemaps_loudness precedent). 21 columns, own psyquilt
+   profile. Tests: 86 offline (+7). Validation (Aug 2026, synthetic,
+   Linux container):
+   - *flatness*: white noise .563 vs the closed-form periodogram
+     expectation exp(−γ) = .5615 (within 0.3%); 440 Hz sine < 1e-3;
+     silence 1.0 (floored-flat by convention).
+   - *contrast*: tone's 400–800 Hz band 54.1 dB-scale depth vs 11.9 on
+     white noise (4.5×), and the tone's argmax band is the band holding
+     the tone.
+   - *MFCC*: std < 1e-3 across windows on a stationary tone (1e-4
+     measured); tone-vs-noise MFCC profile L2 distance ≫ 10.
+
 ### Next (approved Aug 2026)
 
-- **v0.8+ — the endgame trio** (survey Aug 2026: CANLab scoping
-  review, Giordano et al. 2023 Nat Neurosci, pliers): `sound_events`
-  (AudioSet-style scene/event tags — the one big evidenced gap; try a
-  zero-shot prompt bank against our existing CLAP embeddings first —
-  near-free, subsumes laughter detection and music-presence; mind the
-  gender-at-chance negative finding: validate per category, fall back
-  to BEATs (MIT) if zero-shot underperforms); `psychoacoustic` via
-  MoSQITo (Apache-2.0, pure Python: Zwicker loudness/sharpness/
-  roughness/fluctuation strength — completes the Alluri/Toiviainen
-  canon, roughness is the headline missing regressor); `timbre`
-  librosa one-liners (MFCCs — the most common encoding-model
-  regressor, spectral contrast, flatness). After these the registry
-  is considered complete pending real-user demand.
+- **v0.9–v0.10 — endgame trio remainder**: `psychoacoustic` via
+  MoSQITo (Apache-2.0; Zwicker loudness/sharpness/roughness + a native
+  Fastl-style fluctuation estimate — MoSQITo has no fluctuation
+  strength, checked 1.2.1 and master Aug 2026) and `sound_events`
+  (zero-shot CLAP prompt bank, 16 categories, raw-cosine scoring;
+  fall back to BEATs (MIT) if zero-shot underperforms Ben's local
+  validation). After these the registry is considered complete pending
+  real-user demand.
 
 ### Explicitly deferred (do not build without discussion)
 

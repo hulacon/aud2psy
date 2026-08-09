@@ -68,6 +68,7 @@ speaker-identity tracking, use the `diarize` model (below).
 | `onsets` | frame | `onsets_strength`, `onsets_rate`, `onsets_tempo` |
 | `tonal` | frame | `tonal_key_clarity`, `tonal_majorness`, `tonal_chroma_entropy` (Krumhansl profiles, 3 s windows) |
 | `rhythm` | frame | `rhythm_pulse_clarity`, `rhythm_beat_strength`, `rhythm_novelty` (Foote section novelty) |
+| `timbre` | frame | `timbre_mfcc_01`–`13` (MFCC coefficients 1–13; c0 excluded — that's `loudness_db`'s job), `timbre_contrast_01`–`07` (per-octave spectral peak-valley contrast), `timbre_flatness` (Wiener entropy: ~1 noise, ~0 tones) — the standard encoding-model timbre regressors |
 | `speech` | frame | `speech_prob` (Silero VAD) |
 | `clap` | frame | `clap_000`…`clap_511`: LAION-CLAP audio embeddings in a shared space with word2psy's `clap_text` (10 s windows; `--clap-model` to change checkpoint) |
 | `music_emotion` | frame | `music_emotion_valence`, `music_emotion_arousal` in [−1, 1]: DEAM-trained probe on CLAP embeddings. Discriminates affective levels between clips/sections (held-out song-level r = .71/.84); not a beat-to-beat tracker |
