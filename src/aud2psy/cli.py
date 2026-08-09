@@ -59,6 +59,10 @@ def build_parser() -> argparse.ArgumentParser:
                              "laion/larger_clap_music_and_speech)")
     parser.add_argument("--language", default=None, metavar="CODE",
                         help="transcription language code (default: auto-detect)")
+    parser.add_argument("--verbatim", action="store_true",
+                        help="verbatim transcription that keeps fillers ([UH]/[UM]), "
+                             "repetitions, and false starts (CrisperWhisper; "
+                             "English/German only, CC-BY-NC research weights)")
     parser.add_argument("--num-speakers", type=int, default=None, metavar="N",
                         help="exact speaker count hint for the diarize model "
                              "(default: let the pipeline estimate)")
@@ -130,6 +134,10 @@ def main(argv: list[str] | None = None) -> int:
         parser.error(f"unknown model(s): {', '.join(unknown)} (see --list-models)")
     if args.wordpool and "transcribe" not in models:
         parser.error("--wordpool requires the transcribe model")
+    if args.verbatim and "transcribe" not in models:
+        parser.error("--verbatim requires the transcribe model")
+    if args.verbatim and args.whisper_model != "large-v3":
+        parser.error("--verbatim selects the CrisperWhisper checkpoint; drop --whisper-model")
     if args.num_speakers and "diarize" not in models:
         parser.error("--num-speakers requires the diarize model")
 
@@ -146,6 +154,7 @@ def main(argv: list[str] | None = None) -> int:
             wordpool=args.wordpool,
             clap_model=args.clap_model,
             num_speakers=args.num_speakers,
+            verbatim=args.verbatim,
         )
     except Aud2PsyError as exc:
         print(f"error: {exc}", file=sys.stderr)

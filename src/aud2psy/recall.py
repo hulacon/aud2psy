@@ -54,6 +54,10 @@ def annotate_recall(
     match_threshold: float = MATCH_THRESHOLD,
 ) -> pd.DataFrame:
     """One row per spoken word, annotated against the wordpool."""
+    if "is_filler" in words_df.columns:
+        # verbatim-mode filler tags ([UH]) are not recall attempts — they'd
+        # otherwise score as intrusions and pollute the intrusion count
+        words_df = words_df[~words_df["is_filler"].astype(bool)]
     pool_norm = [_normalize(item) for item in wordpool]
     rows = []
     recalled: set[int] = set()

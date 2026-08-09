@@ -135,6 +135,31 @@ an audio–text embedding space the way viz2psy's `clip` and word2psy's
   against hallucination on wordless audio, CPU/int8; `asr_confidence` =
   exp(avg_logprob)). Wordless clips → zero-row transcript +
   `n_speech_segments: 0` in the sidecar: an explicit result, not an error.
+  `--verbatim` swaps the checkpoint for the official CT2 conversion of
+  CrisperWhisper v1 (`nyrahealth/faster_CrisperWhisper`, CC-BY-NC-4.0,
+  **en/de only** — enforced at init): fillers arrive as `[UH]`/`[UM]`
+  tags (`is_filler` words column, excluded from recall matching but not
+  speech_timing), repetitions/false starts kept. Three verbatim-mode
+  inversions of normal behavior, all validated empirically:
+  `vad_filter` **off** (Silero's resegmentation destabilizes
+  CrisperWhisper, whose anti-hallucination training gives 0 segments on
+  wordless audio without help); a **degenerate-loop retry** — a genuine
+  "I I" in the audio stochastically seeds a `,I`×100 loop through
+  temperature fallback (observed with and without explicit `language`),
+  `repetition_penalty=1.1` reliably kills it, BUT CTranslate2 applies
+  the penalty across the whole decode window and it suppressed a
+  genuine distant repeat ("apple … apple" in a recall list), so the
+  penalty fires only when `max_word_run > 6` flags a degenerate first
+  pass (`degenerate_retry` in the sidecar); and word tokens arrive as
+  `,word` / `.word`-after-pause (the retrained no-space-prefix
+  tokenizer through CT2), so `clean_verbatim_word` strips leading
+  separators (trailing punctuation is real) and segment `text` is
+  rebuilt by joining cleaned words. The sidecar's `vad_filter` now
+  comes from the model, not hardcoded in metadata.py. Known residue: an
+  occasional 1-word junk trailing segment at speech offset (low
+  asr_confidence, uninformative no_speech_prob;
+  `hallucination_silence_threshold` made output worse — accepted and
+  documented).
 - **`pipeline.py`** — `score_audio(path, models, hop, whisper_model,
   language) -> ScoreResult(frames_df, transcript_df, words_df, meta)`;
   models load/extract/unload one at a time. `save_result` writes the
@@ -163,7 +188,7 @@ an audio–text embedding space the way viz2psy's `clip` and word2psy's
   (default **large-v3**), `--language`, `--list-models`. No `-o` → frames
   CSV to stdout.
 - **`tests/`** — offline synthetic suite (sine/noise/silence with
-  closed-form ground truth per feature; 69 tests, ~5 s); transcription
+  closed-form ground truth per feature; 79 tests, ~5 s); transcription
   tests behind the `transcription` marker (deselected by default via
   `addopts`; they synthesize speech with macOS `say` and use Whisper
   `small` to stay light).
@@ -395,33 +420,64 @@ in a forced aligner themselves.
    - *runtime*: 1.4 s for a 5 s clip on CPU including openSMILE+VAD
      init — negligible next to the torch models.
 
-### Next (approved Aug 2026, in order)
+8. **v0.7 — verbatim transcription** (done Aug 2026): `--verbatim` on
+   `transcribe`, swapping the checkpoint for the official CT2
+   conversion of CrisperWhisper **v1**
+   (https://huggingface.co/nyrahealth/faster_CrisperWhisper —
+   CC-BY-NC-4.0, English+German only, enforced at init). Checkpoint
+   decision: Ben chose v1-CT2 over the July 2026 **CrisperWhisper
+   2.0** (Interspeech 2026, https://arxiv.org/abs/2607.18934) — 2.0
+   is better (multilingual, controllable verbatim/intended modes,
+   29.6 ms word-boundary error, disfluency F1 87.8 vs v1's 64.8) but
+   has **no faster-whisper path**: its own pip package with a
+   forked-CTranslate2 NVIDIA-only fast path or an eager-attention
+   transformers backend with no MPS branch, unverified transformers-5
+   compat, gated custom non-commercial license (org moved to
+   `nyralabs`). Documented upgrade path; revisit when its
+   Mac/transformers-5 story is verifiable. Also rejected: post-hoc
+   disfluency classifiers (vanilla Whisper deletes fillers before any
+   classifier sees them), whisper-timestamped's `[*]` markers
+   (position-only), Parakeet/Canary (no verbatim support). Design
+   details in Architecture (vad_filter off / degenerate-loop retry /
+   separator stripping — all empirically forced). Sub-question
+   resolutions: tags stay verbatim in `text` + an `is_filler` words
+   column; fillers excluded from recall matching but kept in
+   speech_timing; `--verbatim` errors on a custom `--whisper-model`
+   or non-en/de `--language`. Tests: 79 offline (+10: checkpoint
+   resolution, CLI validation, filler regex, separator cleaning,
+   max_word_run, scripted retry/no-retry/junk-segment fakes, recall
+   exclusion) + 1 behind `weights` (~3 GB checkpoint). Validation
+   (Aug 2026, synthetic `say` stimuli):
+   - *fillers clip* ("So, um, I I think the, uh…"): verbatim output
+     `So [UM] I I think the [UH] the meeting should [UM] start now
+     because the the schedule is [UH] very tight.` — 4/4 fillers
+     tagged, 2/2 repetitions kept. (Caveat: `say` articulates fillers
+     so cleanly that large-v3 also kept them, as plain "um"/"uh" —
+     the deletion problem this mode exists for shows on real
+     conversational speech, per the paper's AMI numbers.)
+   - *the stochastic loop*: ~half of unpenalized decodes of that clip
+     degenerated into `,I`×112 (temperature-fallback lottery seeded
+     by the genuine "I I"; language pinning irrelevant).
+     `repetition_penalty=1.1` cured it in 4/4 runs ~2.5× faster — but
+     also deleted the genuine distant "apple … apple" repeat in the
+     recall clip, hence fallback-only. End-to-end: the retry fired on
+     the fillers clip and produced the perfect transcript;
+     `degenerate_retry` recorded in the sidecar.
+   - *recall*: "apple um banana uh guitar apple" + 4-item pool →
+     fillers excluded (n_intrusions = 1: guitar), the repeated apple
+     matched + flagged repetition, IRT 3.22 s correctly spanning the
+     intervening filler and intrusion.
+   - *word2psy*: verbatim transcript → sentiment chunks with
+     onset/offset/asr_confidence passthrough intact; `[UM]` tokens
+     tokenize harmlessly.
+   - *runtime*: ~18× real time on CPU per pass (~14× slower than
+     large-v3 — token volume from the no-space tokenizer; greedy
+     doesn't help), doubled when the degenerate retry fires. Budget
+     minutes per clip. Trailing junk segments carry asr_confidence
+     .33–.39 vs .90 for real speech — the documented filter handle.
 
-- **v0.7 — verbatim transcription mode** (`--verbatim` on
-  `transcribe`): swap the faster-whisper checkpoint for the official
-  CT2 conversion of CrisperWhisper **v1**
-  (https://huggingface.co/nyrahealth/faster_CrisperWhisper —
-  CC-BY-NC-4.0, English+German, fillers as bracketed tags). Ben chose
-  this over the July 2026 **CrisperWhisper 2.0** (Interspeech 2026,
-  https://arxiv.org/abs/2607.18934): 2.0 is better (multilingual,
-  controllable verbatim/intended modes, 29.6 ms word-boundary error,
-  disfluency F1 87.8 vs v1's 64.8) but has **no faster-whisper path**
-  — its own pip package with a forked-CTranslate2 NVIDIA-only fast
-  path or an eager-attention transformers backend with no MPS branch,
-  unverified transformers-5 compat, gated custom non-commercial
-  license (moved orgs to `nyralabs`). v1-CT2 is a checkpoint swap on
-  our existing stack; its CT2 conversion does *not* guarantee the
-  paper's timestamp accuracy (retrained-head DTW doesn't convert) —
-  a difference of degree within the README's existing word-timestamp
-  caveat. Sub-questions to resolve at build: keep `[UH]`-style tags
-  verbatim in `text` vs an `is_filler` word column; whether
-  `--verbatim` disables `vad_filter` (it may trim the pauses/fillers
-  the mode exists to keep — test both); strip bracketed tags from
-  recall matching. Document 2.0 as the upgrade path; revisit once its
-  Mac/transformers-5 story is verifiable. Also rejected: post-hoc
-  disfluency classifiers (vanilla Whisper deletes fillers before any
-  classifier sees them), whisper-timestamped's `[*]` markers
-  (position-only), Parakeet/Canary (no verbatim support).
+### Next (approved Aug 2026)
+
 - **v0.8+ — the endgame trio** (survey Aug 2026: CANLab scoping
   review, Giordano et al. 2023 Nat Neurosci, pliers): `sound_events`
   (AudioSet-style scene/event tags — the one big evidenced gap; try a
@@ -449,7 +505,7 @@ in a forced aligner themselves.
   carry. The family's contract is wide-sweep feature tables, honestly
   caveated — the README's word-timestamp caveat (N.B. above) stays as
   the permanent answer, pointing precision users out of scope.
-- ~~Verbatim/disfluency mode~~ — **promoted to v0.7** (see Next above).
+- ~~Verbatim/disfluency mode~~ — **shipped in v0.7** (see roadmap).
 - ~~Speaker diarization~~ — **shipped in v0.4** (see roadmap). The
   v0.3.1 `median_f0`/`voice_gender` columns remain as the no-dep
   fallback. Negative finding worth remembering: zero-shot CLAP against

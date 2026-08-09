@@ -43,7 +43,6 @@ def build_sidecar(
             "whisper_model": whisper_model,
             "compute_type": "int8",
             "word_timestamps": True,
-            "vad_filter": True,
-            **transcribe_info,  # language, language_probability, n_speech_segments
+            **transcribe_info,  # language, vad_filter, n_speech_segments, ...
         }
     return meta

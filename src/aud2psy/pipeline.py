@@ -83,6 +83,7 @@ def score_audio(
     wordpool: str | Path | None = None,
     clap_model: str | None = None,
     num_speakers: int | None = None,
+    verbatim: bool = False,
     show_progress: bool = True,
 ) -> ScoreResult:
     """Run the named models on one audio/video file."""
@@ -183,7 +184,10 @@ def score_audio(
         y_16k = audio_at(WHISPER_SR)
         if duration is None:
             duration = len(y_16k) / WHISPER_SR
-        model = get_model("transcribe", whisper_model=whisper_model, language=language)
+        model = get_model(
+            "transcribe", whisper_model=whisper_model, language=language, verbatim=verbatim
+        )
+        whisper_model = model.whisper_model  # verbatim swaps in the CrisperWhisper checkpoint
         t_model = time.time()
         model.load()
         transcript_df, words_df, transcribe_info = model.transcribe(y_16k, WHISPER_SR)

@@ -75,7 +75,7 @@ speaker-identity tracking, use the `diarize` model (below).
 | `egemaps` | frame | the 25 [eGeMAPS](https://audeering.github.io/opensmile/) v02 low-level descriptors via openSMILE: `egemaps_loudness`, spectral balance (`_alpha_ratio`, `_hammarberg`, `_slope_0_500`, `_slope_500_1500`, `_flux`), `_mfcc1`–`4`, and a voiced set (`_f0_semitone`, `_jitter`, `_shimmer`, `_hnr`, `_h1_h2`, `_h1_a3`, formant `_f1/f2/f3_freq/_bw/_amp`) that is NaN off-speech (Silero-gated); needs `pip install "aud2psy[egemaps]"` |
 | `beats` | events | beat/downbeat table (`time`, `is_downbeat`) via [beat_this](https://github.com/CPJKU/beat_this); needs `pip install "aud2psy[beats]"` |
 | `diarize` | events | speaker turn table via [pyannote community-1](https://huggingface.co/pyannote/speaker-diarization-community-1); needs `pip install "aud2psy[diarize]"` + a HuggingFace token (see below) |
-| `transcribe` | segment | time-stamped transcript export (faster-whisper, default `large-v3`; `--whisper-model` to change) |
+| `transcribe` | segment | time-stamped transcript export (faster-whisper, default `large-v3`; `--whisper-model` to change; `--verbatim` for disfluency-preserving CrisperWhisper mode, see below) |
 
 ## Speaker diarization
 
@@ -149,6 +149,43 @@ and other non-commercial research under audEERING's research license —
 use inside commercial products needs a
 [commercial license from audEERING](https://audeering.github.io/opensmile/about.html)
 (the reason this is an opt-in extra).
+
+## Verbatim transcription (`--verbatim`)
+
+Vanilla Whisper silently deletes fillers, repetitions, and false starts —
+fine for content, wrong for fluency, hesitation, or pause research.
+`--verbatim` swaps the transcription checkpoint for
+[CrisperWhisper](https://arxiv.org/abs/2408.16589) (the official
+CTranslate2 conversion of the large-v3 fine-tune):
+
+```bash
+aud2psy transcribe interview.mp4 --verbatim -o scores.csv
+```
+
+Fillers come out as bracketed tags in the text (`[UH]`, `[UM]`) and get
+an `is_filler` column in the words table; repetitions and false starts
+are kept. Filler tags are excluded from `--wordpool` recall matching (a
+filler is not a recall attempt), but still count in the sidecar's
+`speech_timing` — and `n_fillers` is recorded there too.
+
+Decoding is accuracy-first: if a pass degenerates into a repetition loop
+(a real failure mode this model has around genuine repeated words), the
+clip is automatically re-decoded with a mild repetition penalty — the
+penalty is never applied by default because it can suppress genuine
+distant repeats, which recall research needs. The sidecar's
+`degenerate_retry` field records whether the fallback fired.
+
+Limits to know about: **English and German only** (the model's training
+languages); roughly 10–15× slower than the default model on CPU (budget
+minutes per clip, not seconds); word timestamps through the CTranslate2
+conversion are ordinary faster-whisper grade, *not* the CrisperWhisper
+paper's forced-alignment-level numbers (the retrained alignment heads
+don't survive conversion — the README's word-timestamp caveat applies
+unchanged); occasional one-word trailing segments with low
+`asr_confidence` can appear at speech offsets. The weights are
+CC-BY-NC-4.0 (research use). CrisperWhisper 2.0 (multilingual,
+controllable verbatim/intended modes) currently has no faster-whisper
+path and is the documented upgrade once it does.
 
 ## Piping the transcript into word2psy
 
