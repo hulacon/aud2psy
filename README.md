@@ -69,6 +69,7 @@ speaker-identity tracking, use the `diarize` model (below).
 | `tonal` | frame | `tonal_key_clarity`, `tonal_majorness`, `tonal_chroma_entropy` (Krumhansl profiles, 3 s windows) |
 | `rhythm` | frame | `rhythm_pulse_clarity`, `rhythm_beat_strength`, `rhythm_novelty` (Foote section novelty) |
 | `timbre` | frame | `timbre_mfcc_01`–`13` (MFCC coefficients 1–13; c0 excluded — that's `loudness_db`'s job), `timbre_contrast_01`–`07` (per-octave spectral peak-valley contrast), `timbre_flatness` (Wiener entropy: ~1 noise, ~0 tones) — the standard encoding-model timbre regressors |
+| `psychoacoustic` | frame | `psychoacoustic_loudness` (sone, ISO 532-1 time-varying Zwicker), `psychoacoustic_sharpness` (acum, DIN 45692; NaN on silence), `psychoacoustic_roughness` (asper, Daniel & Weber), `psychoacoustic_fluctuation` (Fastl-style estimate, see below) via [MoSQITo](https://github.com/Eomys/MoSQITo). Absolute values assume digital RMS 1.0 = 94 dB SPL (files carry no calibration) — relative time courses are the meaningful output. ~3× real time on CPU |
 | `speech` | frame | `speech_prob` (Silero VAD) |
 | `clap` | frame | `clap_000`…`clap_511`: LAION-CLAP audio embeddings in a shared space with word2psy's `clap_text` (10 s windows; `--clap-model` to change checkpoint) |
 | `music_emotion` | frame | `music_emotion_valence`, `music_emotion_arousal` in [−1, 1]: DEAM-trained probe on CLAP embeddings. Discriminates affective levels between clips/sections (held-out song-level r = .71/.84); not a beat-to-beat tracker |
@@ -150,6 +151,30 @@ and other non-commercial research under audEERING's research license —
 use inside commercial products needs a
 [commercial license from audEERING](https://audeering.github.io/opensmile/about.html)
 (the reason this is an opt-in extra).
+
+## Psychoacoustics (psychoacoustic)
+
+Zwicker sound-quality metrics — the classic music-fMRI regressors of the
+Alluri/Toiviainen lineage, with roughness the one most often missing
+from Python pipelines. Loudness (ISO 532-1), sharpness (DIN 45692), and
+roughness (Daniel & Weber) are MoSQITo's reference implementations,
+sampled onto the frame grid.
+
+Two honesty notes. First, audio files carry no absolute calibration, so
+samples are mapped as digital RMS 1.0 = 94 dB SPL (recorded in the
+sidecar): sone/acum/asper *time courses and comparisons* are meaningful,
+absolute values are not calibrated to playback level. Second,
+`psychoacoustic_fluctuation` is a **native Fastl-style estimate, not a
+standardized metric** — MoSQITo implements no fluctuation strength (no
+maintained Python tool does). It measures 4 Hz-weighted modulation of
+the Zwicker specific-loudness envelopes, calibrated so Fastl's reference
+signal (1 kHz, 60 dB, 100% AM at 4 Hz) reads 1.0, and reproduces the
+canonical orderings (peak at 4 Hz modulation, gone by 70 Hz where
+roughness takes over; AM noise above AM tone). Treat it as a relative
+regressor, not a vacil meter.
+
+`psychoacoustic_sharpness` is NaN where a window's loudness is below
+0.25 sone — sharpness is a spectral ratio, undefined on silence.
 
 ## Verbatim transcription (`--verbatim`)
 

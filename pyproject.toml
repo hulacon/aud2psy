@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aud2psy"
-version = "0.8.0"
+version = "0.9.0"
 description = "Extract psychological and acoustic features from audio (and the audio stream of video), including time-stamped transcription"
 readme = "README.md"
 license = "MIT"
@@ -41,6 +41,11 @@ dependencies = [
     "tqdm>=4.60",
     "torch>=2.0",
     "transformers>=4.35",
+    "mosqito>=1.2.1",
+    # not a real aud2psy dep: mosqito 1.2.1 imports matplotlib at module
+    # load (undeclared, via roughness_ecma._noise_reduction) — drop when
+    # upstream fixes the import
+    "matplotlib>=3.5",
 ]
 
 [project.optional-dependencies]

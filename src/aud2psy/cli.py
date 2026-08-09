@@ -18,6 +18,7 @@ MODEL_REGISTRY: dict[str, tuple[str, str, str]] = {
     "tonal": ("aud2psy.models.tonal", "TonalModel", "Key clarity, mode-majorness, chroma entropy (3 s windows)"),
     "rhythm": ("aud2psy.models.rhythm", "RhythmModel", "Pulse clarity, local pulse strength, structural novelty"),
     "timbre": ("aud2psy.models.timbre", "TimbreModel", "MFCCs 1-13, per-octave spectral contrast, spectral flatness"),
+    "psychoacoustic": ("aud2psy.models.psychoacoustic", "PsychoacousticModel", "Zwicker loudness, sharpness, roughness (MoSQITo) + fluctuation estimate"),
     "speech": ("aud2psy.models.speech", "SpeechModel", "Speech presence probability (Silero VAD)"),
     "clap": ("aud2psy.models.clap", "ClapModel", "512-d CLAP audio embeddings (shared space with word2psy clap_text)"),
     "music_emotion": ("aud2psy.models.music_emotion", "MusicEmotionModel", "Musical valence/arousal (DEAM-trained probe on CLAP)"),

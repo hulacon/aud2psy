@@ -74,7 +74,21 @@ an audio–text embedding space the way viz2psy's `clip` and word2psy's
   `timbre` (MFCCs 1–13 — c0 excluded as loudness_db's job, the
   encoding-model convention — plus 7-band per-octave spectral contrast
   and spectral flatness; frontend constants shared with `spectral` so
-  native frames align), `speech` (`speech_prob`: real per-32ms Silero VAD probabilities via
+  native frames align), `psychoacoustic` (Zwicker loudness/sharpness/
+  roughness via MoSQITo — core dep, Apache-2.0, plus matplotlib only
+  because mosqito 1.2.1 imports it at module load, an upstream bug;
+  `input_sr = 48000`; float samples mapped as digital RMS 1.0 = 94 dB
+  SPL since files carry no calibration; sharpness computed via
+  `sharpness_din_from_loudness` on the one `loudness_zwtv` pass —
+  bit-identical to `sharpness_din_tv`, verified — and NaN-gated below
+  0.25 sone window loudness (a spectral ratio is undefined on silence);
+  `psychoacoustic_fluctuation` is a **native Fastl-style estimate** —
+  MoSQITo has no fluctuation strength — from 1-bark specific-loudness
+  envelopes: 2 s modulation-spectrum windows at grid centers, relative
+  depth with a 0.01 sone floor, H(f)=1/(f/4+4/f) weighting,
+  root-sum-square over modulation bins (L1 over-counts broadband
+  transients), one-point calibrated to Fastl's 4 Hz reference = 1.0;
+  ~3x real time on CPU — slowest non-transcription model), `speech` (`speech_prob`: real per-32ms Silero VAD probabilities via
   faster-whisper's bundled ONNX model — no Whisper weights; resamples
   22050→16k internally), `clap` (v0.2 flagship: 512-d L2-normalized
   LAION-CLAP embeddings, default checkpoint
@@ -498,16 +512,38 @@ in a forced aligner themselves.
    - *MFCC*: std < 1e-3 across windows on a stationary tone (1e-4
      measured); tone-vs-noise MFCC profile L2 distance ≫ 10.
 
+10. **v0.9.0 — psychoacoustic** (done Aug 2026): Zwicker metrics via
+    MoSQITo 1.2.1 (verified Apache-2.0; deps numpy/scipy/pyuff, 1.4 MB;
+    matplotlib added to core deps only because mosqito imports it at
+    module load — upstream bug, drop when fixed). Checkpoint findings:
+    **MoSQITo has no fluctuation strength** (1.2.1 and master checked)
+    → `psychoacoustic_fluctuation` is a native Fastl-style estimate
+    (Ben's call, option B), honestly labeled non-standardized; design
+    details in Architecture. Validation (Aug 2026, synthetic, Linux
+    container, all now test asserts):
+    - *roughness*: 1 kHz carrier, 100% AM — 1.355 asper at 70 Hz vs
+      .271 at 20 Hz / .302 at 200 Hz (the Fastl peak, >4x).
+    - *sharpness*: 4.33 acum on 4 kHz-high-passed noise vs .83 on
+      1 kHz-low-passed (equal RMS); chained `sharpness_din_from_loudness`
+      bit-identical to `sharpness_din_tv` (max |diff| = 0.0).
+    - *loudness*: monotone 2.14/8.57/22.84 sone at amp .01/.1/.5; ISO
+      532-1 post-offset decay visible and respected by the tests.
+    - *fluctuation*: raw estimate 10.59 on Fastl's reference (4 Hz) vs
+      3.13 at 0.5 Hz, 4.28 at 16 Hz, 0.63 at 70 Hz — the canonical
+      contour, complementary to roughness; steady tone exactly 0; AM
+      noise 22.2 > AM tone 10.6 (Fastl's published ordering). The L1→L2
+      modulation-bin fix mattered: L1 read ~10 "vacil" on a mere
+      amplitude step (broadband transient over-counting).
+    - *runtime*: ~2.5x real time for loudness_zwtv on this CPU (~3x
+      total with roughness); offline suite grows ~32 s (module-scoped
+      fixtures share every mosqito call).
+
 ### Next (approved Aug 2026)
 
-- **v0.9–v0.10 — endgame trio remainder**: `psychoacoustic` via
-  MoSQITo (Apache-2.0; Zwicker loudness/sharpness/roughness + a native
-  Fastl-style fluctuation estimate — MoSQITo has no fluctuation
-  strength, checked 1.2.1 and master Aug 2026) and `sound_events`
-  (zero-shot CLAP prompt bank, 16 categories, raw-cosine scoring;
-  fall back to BEATs (MIT) if zero-shot underperforms Ben's local
-  validation). After these the registry is considered complete pending
-  real-user demand.
+- **v0.10 — endgame trio finale**: `sound_events` (zero-shot CLAP
+  prompt bank, 16 categories, raw-cosine scoring; fall back to BEATs
+  (MIT) if zero-shot underperforms Ben's local validation). After this
+  the registry is considered complete pending real-user demand.
 
 ### Explicitly deferred (do not build without discussion)
 

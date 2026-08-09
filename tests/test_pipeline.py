@@ -112,7 +112,7 @@ def test_help_is_fast():
     )
     assert proc.returncode == 0
     # heavy deps must not be imported for --help
-    for lib in ("librosa", "faster_whisper", "pandas"):
+    for lib in ("librosa", "faster_whisper", "pandas", "mosqito", "matplotlib"):
         assert lib not in proc.stderr, f"--help imported {lib}"
 
 
