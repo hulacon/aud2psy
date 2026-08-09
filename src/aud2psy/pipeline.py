@@ -21,6 +21,7 @@ class ScoreResult:
     words_df: pd.DataFrame | None  # word-level timestamps
     recall_df: pd.DataFrame | None = None  # wordpool-annotated recall
     beats_df: pd.DataFrame | None = None  # beat/downbeat events
+    speakers_df: pd.DataFrame | None = None  # diarization speaker turns
     meta: dict = field(default_factory=dict)
 
 
@@ -72,6 +73,7 @@ def score_audio(
     language: str | None = None,
     wordpool: str | Path | None = None,
     clap_model: str | None = None,
+    num_speakers: int | None = None,
     show_progress: bool = True,
 ) -> ScoreResult:
     """Run the named models on one audio/video file."""
@@ -86,9 +88,10 @@ def score_audio(
     unknown = [m for m in models if m not in MODEL_REGISTRY]
     if unknown:
         raise KeyError(f"Unknown model(s): {unknown}; see --list-models")
-    frame_names = [m for m in models if m not in ("transcribe", "beats")]
+    frame_names = [m for m in models if m not in ("transcribe", "beats", "diarize")]
     do_transcribe = "transcribe" in models
     do_beats = "beats" in models
+    do_diarize = "diarize" in models
 
     audio_cache: dict[int, np.ndarray] = {}
 
@@ -104,6 +107,7 @@ def score_audio(
     model_meta: dict[str, dict] = {}
     transcribe_info: dict = {}
     beats_info: dict = {}
+    diarize_info: dict = {}
 
     if frame_names or do_beats:
         duration = len(audio_at(FEATURE_SR)) / FEATURE_SR
@@ -147,6 +151,21 @@ def score_audio(
             "runtime_sec": round(time.time() - t_model, 2),
         }
 
+    speakers_df = exclusive_df = None
+    if do_diarize:
+        y_16k = audio_at(WHISPER_SR)
+        if duration is None:
+            duration = len(y_16k) / WHISPER_SR
+        model = get_model("diarize", num_speakers=num_speakers)
+        t_model = time.time()
+        model.load()
+        speakers_df, exclusive_df, diarize_info = model.diarize(y_16k, WHISPER_SR)
+        model.unload()
+        model_meta["diarize"] = {
+            "columns": list(speakers_df.columns),
+            "runtime_sec": round(time.time() - t_model, 2),
+        }
+
     transcript_df = words_df = recall_df = None
     if do_transcribe:
         y_16k = audio_at(WHISPER_SR)
@@ -179,6 +198,12 @@ def score_audio(
         annotate_voice_gender(transcript_df, frames_df, hop)
         transcribe_info["voice_gender_threshold_hz"] = VOICE_GENDER_F0_HZ
 
+    if transcript_df is not None and exclusive_df is not None:
+        from .models.diarize import merge_speakers
+
+        merge_speakers(transcript_df, words_df, exclusive_df)
+        model_meta["transcribe"]["columns"] = list(transcript_df.columns)
+
     meta = build_sidecar(
         input_path=path,
         input_type=in_type,
@@ -189,6 +214,7 @@ def score_audio(
         whisper_model=whisper_model if do_transcribe else None,
         transcribe_info=transcribe_info,
         beats_info=beats_info,
+        diarize_info=diarize_info,
         total_runtime_sec=round(time.time() - t0, 2),
     )
     return ScoreResult(
@@ -197,6 +223,7 @@ def score_audio(
         words_df=words_df,
         recall_df=recall_df,
         beats_df=beats_df,
+        speakers_df=speakers_df,
         meta=meta,
     )
 
@@ -229,6 +256,9 @@ def save_result(result: ScoreResult, out_path: str | Path) -> dict[str, Path]:
     if result.beats_df is not None:
         written["beats"] = Path(f"{stem}_beats.csv")
         result.beats_df.to_csv(written["beats"], index=False, float_format="%.6g")
+    if result.speakers_df is not None:
+        written["speakers"] = Path(f"{stem}_speakers.csv")
+        result.speakers_df.to_csv(written["speakers"], index=False, float_format="%.6g")
     meta_path = Path(f"{stem}.meta.json")
     result.meta["output"] = {
         kind: {"path": str(p), "rows": _n_rows(result, kind)} for kind, p in written.items()
@@ -246,5 +276,6 @@ def _n_rows(result: ScoreResult, kind: str) -> int:
         "transcript_words": result.words_df,
         "recall": result.recall_df,
         "beats": result.beats_df,
+        "speakers": result.speakers_df,
     }[kind]
     return len(df)

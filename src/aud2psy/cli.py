@@ -21,6 +21,7 @@ MODEL_REGISTRY: dict[str, tuple[str, str, str]] = {
     "clap": ("aud2psy.models.clap", "ClapModel", "512-d CLAP audio embeddings (shared space with word2psy clap_text)"),
     "music_emotion": ("aud2psy.models.music_emotion", "MusicEmotionModel", "Musical valence/arousal (DEAM-trained probe on CLAP)"),
     "beats": ("aud2psy.models.beats", "BeatsModel", "Beat/downbeat event table (beat_this; needs the [beats] extra)"),
+    "diarize": ("aud2psy.models.diarize", "DiarizeModel", "Speaker turn table (pyannote community-1; needs the [diarize] extra + HF token)"),
     "transcribe": ("aud2psy.models.transcribe", "TranscribeModel", "Time-stamped transcript export for word2psy (faster-whisper)"),
 }
 
@@ -56,6 +57,9 @@ def build_parser() -> argparse.ArgumentParser:
                              "laion/larger_clap_music_and_speech)")
     parser.add_argument("--language", default=None, metavar="CODE",
                         help="transcription language code (default: auto-detect)")
+    parser.add_argument("--num-speakers", type=int, default=None, metavar="N",
+                        help="exact speaker count hint for the diarize model "
+                             "(default: let the pipeline estimate)")
     parser.add_argument("--wordpool", default=None, metavar="PATH",
                         help="wordpool file (one item per line) for free-recall "
                              "annotation; requires the transcribe model and adds "
@@ -73,7 +77,7 @@ def _version() -> str:
 
 def list_models() -> None:
     width = max(len(n) for n in MODEL_REGISTRY)
-    levels = {"transcribe": "segment", "beats": "events "}
+    levels = {"transcribe": "segment", "beats": "events ", "diarize": "events "}
     for name, (_, _, desc) in MODEL_REGISTRY.items():
         print(f"{name:<{width}}  {levels.get(name, 'frame  ')}  {desc}")
 
@@ -103,6 +107,13 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
             models.remove("beats")
+        if importlib.util.find_spec("pyannote") is None:
+            print(
+                "note: skipping diarize (optional dependency not installed; "
+                'pip install "aud2psy[diarize]")',
+                file=sys.stderr,
+            )
+            models.remove("diarize")
     if not models:
         parser.error("no models requested; name models before the input file or use --all")
     unknown = [m for m in models if m not in MODEL_REGISTRY]
@@ -110,6 +121,8 @@ def main(argv: list[str] | None = None) -> int:
         parser.error(f"unknown model(s): {', '.join(unknown)} (see --list-models)")
     if args.wordpool and "transcribe" not in models:
         parser.error("--wordpool requires the transcribe model")
+    if args.num_speakers and "diarize" not in models:
+        parser.error("--num-speakers requires the diarize model")
 
     from .exceptions import Aud2PsyError
     from .pipeline import save_result, score_audio
@@ -123,6 +136,7 @@ def main(argv: list[str] | None = None) -> int:
             language=args.language,
             wordpool=args.wordpool,
             clap_model=args.clap_model,
+            num_speakers=args.num_speakers,
         )
     except Aud2PsyError as exc:
         print(f"error: {exc}", file=sys.stderr)

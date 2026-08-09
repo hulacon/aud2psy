@@ -91,7 +91,19 @@ an audio–text embedding space the way viz2psy's `clip` and word2psy's
   (beat_this,
   optional `[beats]` extra since it's a git dep — madmom is dead
   upstream; CPU inference; one row per beat with `is_downbeat`, sidecar
-  gets n_beats/n_downbeats/median tempo). Segment level:
+  gets n_beats/n_downbeats/median tempo), `diarize` (pyannote
+  `speaker-diarization-community-1`, optional `[diarize]` extra — the
+  weights are HF-gated (one-time license acceptance + token), so it can
+  never work straight out of pip; CPU inference on an in-memory 16 kHz
+  waveform so pyannote's own decoder never touches inputs; one row per
+  speaker turn in `{stem}_speakers.csv` from the raw timeline, while the
+  *exclusive* timeline drives speaker merging onto the transcript
+  (majority overlap per segment) and words table (word-midpoint lookup —
+  Whisper merges turns into one segment routinely, so the word-level
+  column is the trustworthy one); `--num-speakers` forwards the
+  exact-count hint; sidecar gets pipeline/n_speakers/n_turns/per-speaker
+  speech time; merge helpers are pure pandas, offline-tested). Segment
+  level:
   `transcribe` (faster-whisper, `word_timestamps=True`, `vad_filter=True`
   against hallucination on wordless audio, CPU/int8; `asr_confidence` =
   exp(avg_logprob)). Wordless clips → zero-row transcript +
@@ -266,6 +278,30 @@ deferred fix.
    temporal model (LSTM/transformer over embedding sequences) is the
    documented upgrade path if within-excerpt dynamics ever matter.
 
+5. **v0.4 — speaker diarization** (done Aug 2026): `diarize` via
+   pyannote.audio 4.0.7 + `speaker-diarization-community-1` (CC-BY-4.0,
+   supersedes the 3.1 pipeline WhisperX standardized on; better DER and
+   built-in exclusive diarization, which made WhisperX unnecessary — the
+   merge is ~30 lines of pandas here). Checkpoint decisions: optional
+   `[diarize]` extra (gated weights mean it can't work out-of-the-box
+   anyway), `--num-speakers` exact-count hint only, recall export left
+   alone. Tests: 58 offline (+6 merge-logic) + 2 behind the new
+   `diarization` marker. Validation (Aug 2026, synthetic stimuli):
+   - *dialogue*: 14 s two-voice `say` dialogue (4 turns, 0.6 s gaps) →
+     exactly 2 speakers, 4 turns, turn onsets within 0.03–0.06 s of
+     ground truth, both with and without the `--num-speakers 2` hint;
+     word-level speaker purity 100% (37/39 words assigned; 2 trailing
+     words fall in a gap → ""), speaker↔voice_gender mapping perfectly
+     1:1. Whisper merged turns 1+2 into one segment (routine), which is
+     why per-word speakers matter.
+   - *wordless*: 20 s melody+percussion → 0 speakers, 0 turns; silence
+     likewise (explicit result, not an error).
+   - *word2psy passthrough*: speaker-stamped transcript through
+     `word2psy sentiment --text-column text` → `speaker` survives into
+     chunks output next to onset/offset.
+   - *runtime*: 8.2 s for the 14 s clip on CPU (M-series), incl. ~5 s
+     pipeline load — fine for 3–6 min clips.
+
 ### Explicitly deferred (do not build without discussion)
 
 - **Temporal music-emotion model** — sequence model over CLAP embeddings
@@ -277,19 +313,13 @@ deferred fix.
   and repetitions; CrisperWhisper (https://arxiv.org/abs/2408.16589)
   preserves them with timed filler events. Needed before anyone uses our
   transcripts for fluency/pause-content research.
-- **Speaker diarization** (who is speaking when) — pyannote via WhisperX
-  is the community standard; torch + HF-gated weights. **NEXT UP: Ben
-  asked (Aug 2026) to investigate pyannote next session** — the torch
-  barrier fell in v0.2, so remaining costs are the gated weights
-  (one-time HF license acceptance + token) and a `diarize` wrapper
-  emitting a `{stem}_speakers.csv` + a speaker column merged into the
-  transcript. Interim shipped in v0.3.1: per-segment `median_f0` +
-  coarse `voice_gender` on the transcript (validated 4/4 turns on the
-  dialogue clip: M 111–114 Hz vs F 167–172 Hz). Negative finding worth
-  remembering: zero-shot CLAP against "a man/woman speaking" captions
-  performed at chance (52%) for per-window gender — 10 s windows
-  straddle dialogue turns and CLAP encodes speaker attributes weakly;
-  don't reach for it for speaker tasks.
+- ~~Speaker diarization~~ — **shipped in v0.4** (see roadmap). The
+  v0.3.1 `median_f0`/`voice_gender` columns remain as the no-dep
+  fallback. Negative finding worth remembering: zero-shot CLAP against
+  "a man/woman speaking" captions performed at chance (52%) for
+  per-window gender — 10 s windows straddle dialogue turns and CLAP
+  encodes speaker attributes weakly; don't reach for it for speaker
+  tasks.
 - **Prosodic-emotion models** — how a line is said vs. its content; a
   different affective signal than word2psy's text `emotion`. openSMILE
   eGeMAPS is the standard feature set (non-OSI license — optional extra).

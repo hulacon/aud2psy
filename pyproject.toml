@@ -47,6 +47,8 @@ dependencies = [
 dev = ["pytest", "ipython"]
 # beat_this is not on PyPI; the git reference keeps this an opt-in extra
 beats = ["beat_this @ git+https://github.com/CPJKU/beat_this"]
+# gated weights (one-time HF license acceptance + token) keep this opt-in too
+diarize = ["pyannote.audio>=4.0"]
 
 [project.scripts]
 aud2psy = "aud2psy.cli:main"
@@ -67,5 +69,6 @@ testpaths = ["tests"]
 markers = [
     "transcription: needs Whisper weights (downloads on cold cache) and macOS `say`",
     "weights: needs large model downloads (CLAP ~2 GB, beat_this checkpoint)",
+    "diarization: needs the [diarize] extra, an HF token, and the gated community-1 weights",
 ]
-addopts = "-m 'not transcription and not weights'"
+addopts = "-m 'not transcription and not weights and not diarization'"

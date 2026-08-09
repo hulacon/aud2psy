@@ -37,6 +37,7 @@ aud2psy --list-models
 | `scores_transcript.csv` | one row per Whisper segment: `text`, `onset`, `offset`, `asr_confidence`, `no_speech_prob` — plus `median_f0` and coarse `voice_gender` (M/F, 150 Hz f0 boundary) when the `pitch` model also runs |
 | `scores_transcript_words.csv` | word-level timestamps |
 | `scores_beats.csv` | beat/downbeat events (with the `beats` model) |
+| `scores_speakers.csv` | speaker turns (with the `diarize` model): `turn_idx`, `speaker`, `onset`, `offset` |
 | `scores.meta.json` | provenance sidecar |
 
 A wordless clip produces a zero-row transcript and `n_speech_segments: 0`
@@ -44,8 +45,8 @@ in the sidecar — an explicit result, not an error.
 
 `voice_gender` is a deliberately coarse cue (per-segment median pyin f0
 against the classic 150 Hz boundary): it cannot separate two same-gender
-speakers, and children's voices sit above both adult ranges. True
-speaker-identity tracking (diarization) is on the roadmap.
+speakers, and children's voices sit above both adult ranges. For true
+speaker-identity tracking, use the `diarize` model (below).
 
 > **Word-timestamp accuracy.** Whisper-derived word timestamps are good
 > to roughly the 100–200 ms level, not forced-alignment level — published
@@ -71,7 +72,33 @@ speaker-identity tracking (diarization) is on the roadmap.
 | `clap` | frame | `clap_000`…`clap_511`: LAION-CLAP audio embeddings in a shared space with word2psy's `clap_text` (10 s windows; `--clap-model` to change checkpoint) |
 | `music_emotion` | frame | `music_emotion_valence`, `music_emotion_arousal` in [−1, 1]: DEAM-trained probe on CLAP embeddings. Discriminates affective levels between clips/sections (held-out song-level r = .71/.84); not a beat-to-beat tracker |
 | `beats` | events | beat/downbeat table (`time`, `is_downbeat`) via [beat_this](https://github.com/CPJKU/beat_this); needs `pip install "aud2psy[beats]"` |
+| `diarize` | events | speaker turn table via [pyannote community-1](https://huggingface.co/pyannote/speaker-diarization-community-1); needs `pip install "aud2psy[diarize]"` + a HuggingFace token (see below) |
 | `transcribe` | segment | time-stamped transcript export (faster-whisper, default `large-v3`; `--whisper-model` to change) |
+
+## Speaker diarization
+
+`diarize` labels who speaks when, using pyannote's open
+[community-1](https://huggingface.co/pyannote/speaker-diarization-community-1)
+pipeline (CC-BY-4.0). The weights are gated on HuggingFace — one-time
+setup:
+
+```bash
+pip install "aud2psy[diarize]"
+# 1. accept the conditions at the model page above (free)
+# 2. authenticate: `huggingface-cli login`, or set HF_TOKEN
+```
+
+```bash
+aud2psy diarize transcribe clip.mp4 -o scores.csv --num-speakers 2
+```
+
+This writes `scores_speakers.csv` (one row per speaker turn) and, when
+`transcribe` runs in the same call, adds a `speaker` column to the
+transcript (majority-overlap speaker per segment) and words table
+(speaker at each word's midpoint) — so word2psy chunks inherit speaker
+identity via passthrough columns. `--num-speakers` is optional; without
+it the pipeline estimates the count. The sidecar records `n_speakers`,
+turn counts, and per-speaker speech time. Inference runs on CPU.
 
 ## Piping the transcript into word2psy
 

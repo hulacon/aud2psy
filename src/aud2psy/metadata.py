@@ -17,6 +17,7 @@ def build_sidecar(
     transcribe_info: dict,
     total_runtime_sec: float,
     beats_info: dict | None = None,
+    diarize_info: dict | None = None,
 ) -> dict:
     from . import __version__
 
@@ -35,6 +36,8 @@ def build_sidecar(
         meta["frames"] = {"hop_sec": hop, "n_frames": n_frames, "time": "window center"}
     if beats_info:
         meta["beats"] = beats_info
+    if diarize_info:
+        meta["diarization"] = diarize_info
     if whisper_model is not None:
         meta["transcription"] = {
             "whisper_model": whisper_model,
