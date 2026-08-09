@@ -224,8 +224,29 @@ an audio–text embedding space the way viz2psy's `clip` and word2psy's
   (default **0.5 s**, 1:1 with viz2psy video frames), `--whisper-model`
   (default **large-v3**), `--language`, `--list-models`. No `-o` → frames
   CSV to stdout.
+- **`viz/`** — the family dashboard, for audio (`aud2psy viz browse
+  scores.csv`). One self-contained HTML file built on word2psy's
+  template (payload JSON + Plotly.js CDN): model selector over both
+  tables (frame + transcript-segment level), timeseries / 2D-3D
+  clustering / trajectory views, click-to-open detail viewer with
+  slider/arrow-key browsing. The stimulus can't be pictured, so
+  **play/pause replaces the image**: the input clip embeds as a data
+  URI (ffmpeg mono mp3; raw-wav fallback so tests and ffmpeg-less use
+  still work), the overview gets a waveform strip (peak envelope
+  computed at decode) plus full-stream play with a moving cursor
+  (vertical line on timeseries, nearest-row ring on 2D
+  scatter/trajectory; 3D has no cursor — restyle is too slow), and the
+  detail view's play button plays just that row's span (frame hop
+  window / segment onset-offset) with auto-stop at the boundary and an
+  optional loop. Audio path auto-resolves from the sidecar's
+  `input.path`; `--audio` overrides; no audio → same dashboard minus
+  playback. `feature_config.py` maps models→viz types with exact
+  column patterns (so `speech_prob` / `speech_emotion_*` can't
+  cross-match); `projection.py` is copied **verbatim** from word2psy
+  (sklearn arrives free as a librosa dep — the dashboard adds no deps;
+  plotly is CDN-only, never a Python import).
 - **`tests/`** — offline synthetic suite (sine/noise/silence with
-  closed-form ground truth per feature; 79 tests, ~5 s); transcription
+  closed-form ground truth per feature; 130 tests); transcription
   tests behind the `transcription` marker (deselected by default via
   `addopts`; they synthesize speech with macOS `say` and use Whisper
   `small` to stay light).
@@ -578,6 +599,23 @@ in a forced aligner themselves.
     **`VALIDATION.md` (repo root) is the live checklist for this local
     pass** — fill it in, fold the numbers back into this entry, then
     delete it.
+
+12. **v0.11.0 — dashboard** (done Aug 2026): `aud2psy viz browse`, the
+    word2psy/viz2psy dashboard interface with **play/pause controls in
+    place of the stimulus picture** (Ben's design call): the detail
+    (token-level) view plays the single hop-length window — loopable,
+    since 0.5 s is short — and the overview/trajectory pages play the
+    full audio stream with a cursor synced to the plots. Design details
+    in Architecture. Tests: 130 offline (+26, incl. a real-wav
+    `prepare_audio` round trip). Validation (Aug 2026, Linux container;
+    synthetic 20 s melody+percussion clip scored with the 7 librosa-only
+    models + a hand-written transcript): 17/17 headless-Chromium checks
+    pass — 1.2 MB dashboard with embedded wav, 8 models detected over 40
+    frames + 3 segments, audio plays with the timeseries cursor tracking
+    the playhead, frame-window playback starts inside [6.00, 6.50] s and
+    auto-stops at 6.50 exactly, segment playback starts at its 5.0 s
+    onset, zero console errors. Caveat: the ffmpeg→mp3 embed path wasn't
+    exercised in-container (no ffmpeg); the wav fallback was.
 
 ### Explicitly deferred (do not build without discussion)
 

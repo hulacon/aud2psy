@@ -39,7 +39,10 @@ def build_parser() -> argparse.ArgumentParser:
             "audio stream of video. Frame-level models write a time-by-feature CSV; "
             "transcribe exports a transcript CSV for word2psy."
         ),
-        epilog='Example: aud2psy loudness pitch transcribe clip.mp4 -o scores.csv',
+        epilog=(
+            "Example: aud2psy loudness pitch transcribe clip.mp4 -o scores.csv | "
+            "Visualize: aud2psy viz browse scores.csv -o browse.html --open"
+        ),
     )
     parser.add_argument(
         "inputs",
@@ -91,7 +94,150 @@ def list_models() -> None:
         print(f"{name:<{width}}  {levels.get(name, 'frame  ')}  {desc}")
 
 
+def resolve_scores_paths(path) -> tuple:
+    """Resolve a scores path to (frames, transcript, meta) file paths.
+
+    Accepts the base path given to ``-o`` at scoring time (``scores.csv``)
+    or either of the actual output files (``scores_frames.csv`` /
+    ``scores_transcript.csv``). Missing files resolve to None.
+    """
+    from pathlib import Path
+
+    path = Path(path)
+    name = path.name
+    if name.endswith("_frames.csv"):
+        base = name[: -len("_frames.csv")]
+    elif name.endswith("_transcript.csv"):
+        base = name[: -len("_transcript.csv")]
+    else:
+        base = path.stem
+    frames = path.parent / f"{base}_frames.csv"
+    transcript = path.parent / f"{base}_transcript.csv"
+    meta = path.parent / f"{base}.meta.json"
+    return tuple(p if p.exists() else None for p in (frames, transcript, meta))
+
+
+def _viz_browse(args) -> int:
+    """Handle 'aud2psy viz browse'."""
+    import json
+    from pathlib import Path
+
+    import pandas as pd
+
+    from .viz.dashboard import create_dashboard, prepare_audio
+
+    frames_path, transcript_path, meta_path = resolve_scores_paths(args.csv)
+    if frames_path is None and transcript_path is None:
+        print(
+            f"error: no scores files found for {args.csv} "
+            f"(looked for *_frames.csv / *_transcript.csv)",
+            file=sys.stderr,
+        )
+        return 1
+
+    frames_df = pd.read_csv(frames_path) if frames_path else None
+    transcript_df = pd.read_csv(transcript_path) if transcript_path else None
+    meta = json.loads(meta_path.read_text()) if meta_path else None
+    found = ", ".join(str(p) for p in (frames_path, transcript_path) if p)
+    print(f"Building dashboard from {found}...")
+
+    # Audio to embed: --audio flag, else the sidecar's recorded input path
+    audio = None
+    audio_path = args.audio or (meta or {}).get("input", {}).get("path")
+    if audio_path and Path(audio_path).exists():
+        print(f"Embedding audio from {audio_path}...")
+        try:
+            audio = prepare_audio(audio_path)
+        except Exception as exc:
+            print(f"warning: could not embed audio ({exc})", file=sys.stderr)
+    elif audio_path:
+        print(
+            f"warning: audio file not found ({audio_path}); "
+            "pass --audio to enable playback",
+            file=sys.stderr,
+        )
+    else:
+        print(
+            "warning: no audio path (no sidecar); pass --audio to enable playback",
+            file=sys.stderr,
+        )
+
+    args_csv = Path(args.csv)
+    try:
+        html = create_dashboard(
+            frames_df,
+            transcript_df,
+            audio=audio,
+            meta=meta,
+            title=args.title or f"aud2psy — {args_csv.stem}",
+            max_points=args.max_points,
+        )
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    base = args_csv.name
+    for suffix in ("_frames.csv", "_transcript.csv"):
+        if base.endswith(suffix):
+            base = base[: -len(suffix)]
+    output = args.output or args_csv.parent / f"{Path(base).stem}_browse.html"
+    output = Path(output)
+    output.write_text(html, encoding="utf-8")
+    print(f"Saved dashboard to {output}")
+
+    if args.open:
+        import webbrowser
+
+        webbrowser.open(f"file://{output.absolute()}")
+    return 0
+
+
+def _viz_main(argv: list[str]) -> int:
+    """Handle 'aud2psy viz ...' subcommands."""
+    parser = argparse.ArgumentParser(
+        prog="aud2psy viz",
+        description="Visualize aud2psy output.",
+    )
+    sub = parser.add_subparsers(dest="viz_cmd")
+
+    p_br = sub.add_parser(
+        "browse",
+        help="Interactive HTML dashboard with audio play/pause controls.",
+    )
+    p_br.add_argument(
+        "csv",
+        help="Scores path (scores.csv base, or a *_frames.csv / *_transcript.csv file).",
+    )
+    p_br.add_argument("-o", "--output", help="Output HTML path.")
+    p_br.add_argument("--audio", metavar="PATH",
+                      help="audio/video file to embed for playback "
+                           "(default: the input recorded in the .meta.json sidecar)")
+    p_br.add_argument("--title", help="Dashboard title.")
+    p_br.add_argument(
+        "--max-points",
+        type=int,
+        default=2000,
+        help="Maximum rows per table to include (default: 2000).",
+    )
+    p_br.add_argument(
+        "--open",
+        action="store_true",
+        help="Open the dashboard in a browser after creation.",
+    )
+
+    args = parser.parse_args(argv)
+    if args.viz_cmd is None:
+        parser.print_help()
+        return 1
+    return _viz_browse(args)
+
+
 def main(argv: list[str] | None = None) -> int:
+    if argv is None:
+        argv = sys.argv[1:]
+    if argv and argv[0] == "viz":
+        return _viz_main(argv[1:])
+
     parser = build_parser()
     args = parser.parse_args(argv)
 

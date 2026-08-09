@@ -258,6 +258,34 @@ be validated on stimuli like yours before interpretation —
 `scripts/validate_sound_events.py` prints per-category separation on
 synthetic target stimuli and profiles any real clips you pass it.
 
+## Interactive dashboard (`viz browse`)
+
+The word2psy/viz2psy dashboard, for audio: a single self-contained HTML
+file with a model selector, timeseries / 2D-3D clustering / trajectory
+views over the frame and transcript tables, and a click-to-open detail
+viewer with a slider and prev/next browsing.
+
+```bash
+aud2psy --all clip.mp4 -o scores.csv
+aud2psy viz browse scores.csv --open
+```
+
+Since the stimulus can't be pictured, it's played: the input clip is
+embedded in the page (ffmpeg-encoded mono mp3, ~4 MB for a 6-minute
+clip) behind play/pause controls. The overview gets a waveform strip
+and a play button that follows the full stream with a moving time
+cursor on the plots; clicking any point opens the detail view, whose
+play button plays just that frame's hop-length window (with an
+optional loop — half a second is short) or the transcript segment's
+onset-offset span. Arrow keys step frames, space replays, and
+scrubbing while playing keeps the audio following.
+
+The audio comes from the input path recorded in the `.meta.json`
+sidecar; pass `--audio` if the file has moved (or to add playback to
+CSVs scored elsewhere). Without audio the dashboard still works,
+minus playback. Plotly.js loads from CDN (the one non-offline bit,
+same as the siblings).
+
 ## Free-recall annotation
 
 For spoken free-recall recordings, supply a wordpool (one item per line)
