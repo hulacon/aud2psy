@@ -125,9 +125,12 @@ def score_audio(
     if frame_names:
         grid = Grid.for_duration(duration, hop)
         columns: dict[str, np.ndarray] = {"time": grid.centers}
+        clap_cache: dict = {}  # shares CLAP window embeddings across clap-family models
         for name in tqdm(frame_names, desc="models", disable=not show_progress):
             kwargs = {"checkpoint": clap_model} if name == "clap" and clap_model else {}
             model = get_model(name, **kwargs)
+            if hasattr(model, "embed_windows"):
+                model.cache_ = clap_cache
             t_model = time.time()
             model.load()
             model_sr = model.input_sr or FEATURE_SR

@@ -58,7 +58,22 @@ class ClapModel(BaseModel):
     def embed_windows(self, y: np.ndarray, sr: int, centers: np.ndarray) -> np.ndarray:
         """(len(centers), 512) unit-norm embeddings of 10 s windows centered
         on ``centers`` (edge-clamped). Shared by `clap`, `music_emotion`,
-        and the DEAM training script."""
+        `sound_events`, and the DEAM training script.
+
+        When the pipeline attaches a per-run dict as ``cache_``, the
+        computed array is reused across the clap-family models in the same
+        run (keyed by checkpoint/sample rate/centers, so a ``--clap-model``
+        override on `clap` correctly misses against the fixed-checkpoint
+        models). In-memory and per-run only — no disk persistence."""
+        cache = getattr(self, "cache_", None)
+        if cache is None:
+            return self._embed_windows(y, sr, centers)
+        key = (self.checkpoint, sr, centers.tobytes())
+        if key not in cache:
+            cache[key] = self._embed_windows(y, sr, centers)
+        return cache[key]
+
+    def _embed_windows(self, y: np.ndarray, sr: int, centers: np.ndarray) -> np.ndarray:
         import torch
         from tqdm import tqdm
 

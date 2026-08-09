@@ -103,8 +103,12 @@ an audio–text embedding space the way viz2psy's `clip` and word2psy's
   `music_emotion_arousal` in [-1, 1]; the fitted probe ships as package
   data `data/music_emotion_probe.{npz,json}` — ~4 KB coefficient matrix
   plus provenance with CV numbers — reproduced by
-  `scripts/train_deam_probe.py`; embeddings are recomputed even when
-  `clap` also runs, a known deferred optimization), `sound_events`
+  `scripts/train_deam_probe.py`; since v0.10.1 the pipeline shares one
+  per-run embedding cache across the clap-family models — keyed on
+  checkpoint/sr/centers in `ClapModel.embed_windows`, attached by the
+  pipeline to any model exposing `embed_windows`, in-memory only —
+  so `clap` + `music_emotion` + `sound_events` cost one forward pass,
+  not three; weights still load per model), `sound_events`
   (16 zero-shot event tags — speech/music/singing/laughter/crying/
   shouting/crowd/applause/footsteps/vehicle/water/wind/animals/
   gunshot_explosion/siren_alarm/thunder — scored as **raw cosine** of

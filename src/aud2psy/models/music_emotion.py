@@ -10,8 +10,9 @@ numbers; `scripts/train_deam_probe.py` reproduces it.
 The probe is trained on music. On speech/foley it still produces values
 (CLAP embeds everything), but interpret them as "how the soundtrack would
 feel if heard as music" — it is a musical-affect estimate, not a general
-one. Embeddings are recomputed even if `clap` also ran (sharing them
-across models is a known deferred optimization).
+one. When `clap` (or `sound_events`) runs in the same pipeline call, the
+window embeddings are computed once and shared via the pipeline's
+per-run cache (see ``ClapModel.embed_windows``).
 """
 
 from __future__ import annotations
