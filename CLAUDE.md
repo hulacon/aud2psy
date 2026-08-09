@@ -265,9 +265,10 @@ remains the accuracy reference (https://arxiv.org/pdf/2406.19363).
 faster-whisper's cross-attention timestamps are a tier below WhisperX
 (which adds wav2vec2 phoneme alignment). Fine for word2psy chunking and
 fMRI-scale regressors; NOT sufficient for vocalization-onset-locked
-EEG/iEEG analyses. Documented in the README; an optional alignment
-refinement stage (MFA export now / wav2vec2 in the torch tier) is the
-deferred fix.
+EEG/iEEG analyses. Documented in the README, which is the permanent
+answer: in-package refinement was **descoped** Aug 2026 (see the
+deferred list) — precision-timing users should hand-verify alignments
+in a forced aligner themselves.
 
 4. **v0.3 — music_emotion probe** (done Aug 2026): design checkpoint
    decisions — probe on CLAP (not MERT), RidgeCV per dimension (the
@@ -348,8 +349,14 @@ deferred fix.
 - **Temporal music-emotion model** — sequence model over CLAP embeddings
   for within-excerpt affect dynamics (see v0.3 finding above); only
   worth it with a use case in hand, given DEAM's within-song ceiling.
-- **Word-timestamp refinement** — MFA TextGrid round-trip (CPU, no torch,
-  heavy Kaldi install) or wav2vec2 alignment (torch tier). See N.B. above.
+- ~~Word-timestamp refinement~~ — **descoped, do not build** (Ben, Aug
+  2026). The only users needing sub-50 ms onsets (vocalization-locked
+  EEG/iEEG, single-trial RT) are doing bespoke work that should
+  hand-verify alignments in MFA directly; a built-in "refined" flag
+  would invite trusting the pipeline for precision work it shouldn't
+  carry. The family's contract is wide-sweep feature tables, honestly
+  caveated — the README's word-timestamp caveat (N.B. above) stays as
+  the permanent answer, pointing precision users out of scope.
 - **Verbatim/disfluency mode** — vanilla Whisper silently deletes fillers
   and repetitions; CrisperWhisper (https://arxiv.org/abs/2408.16589)
   preserves them with timed filler events. Needed before anyone uses our
