@@ -71,6 +71,7 @@ speaker-identity tracking, use the `diarize` model (below).
 | `speech` | frame | `speech_prob` (Silero VAD) |
 | `clap` | frame | `clap_000`…`clap_511`: LAION-CLAP audio embeddings in a shared space with word2psy's `clap_text` (10 s windows; `--clap-model` to change checkpoint) |
 | `music_emotion` | frame | `music_emotion_valence`, `music_emotion_arousal` in [−1, 1]: DEAM-trained probe on CLAP embeddings. Discriminates affective levels between clips/sections (held-out song-level r = .71/.84); not a beat-to-beat tracker |
+| `speech_emotion` | frame | `speech_emotion_valence`, `_arousal`, `_dominance` (~0–1): vocal affect from [audeering's wav2vec2 MSP-Podcast model](https://huggingface.co/audeering/wav2vec2-large-robust-12-ft-emotion-msp-dim) in 4 s windows; NaN where the window isn't speech (Silero-gated). Weights are CC-BY-NC-SA (research use) |
 | `beats` | events | beat/downbeat table (`time`, `is_downbeat`) via [beat_this](https://github.com/CPJKU/beat_this); needs `pip install "aud2psy[beats]"` |
 | `diarize` | events | speaker turn table via [pyannote community-1](https://huggingface.co/pyannote/speaker-diarization-community-1); needs `pip install "aud2psy[diarize]"` + a HuggingFace token (see below) |
 | `transcribe` | segment | time-stamped transcript export (faster-whisper, default `large-v3`; `--whisper-model` to change) |
@@ -99,6 +100,24 @@ transcript (majority-overlap speaker per segment) and words table
 identity via passthrough columns. `--num-speakers` is optional; without
 it the pipeline estimates the count. The sidecar records `n_speakers`,
 turn counts, and per-speaker speech time. Inference runs on CPU.
+
+## Vocal affect (speech_emotion)
+
+`speech_emotion` scores *how* speech sounds — dimensional
+arousal/dominance/valence from the audeering wav2vec2 model (CCC
+.745/.634/.638 on MSP-Podcast; Wagner et al. 2023, TPAMI) — a different
+affective signal than word2psy's text `emotion`, which scores what the
+words say. Windows that aren't speech are NaN, so music and effects don't
+produce phantom affect. Combine with `diarize` to get per-speaker affect
+by grouping frame windows by speaker turn.
+
+Two honest caveats from the source paper: the model's *valence* partly
+reflects implicit linguistic content learned in fine-tuning (so it
+overlaps text sentiment for English; arousal/dominance are the more
+purely paralinguistic dimensions), and overlapping *human* non-speech
+sound (crowds, babble) is its worst-case interference. The weights are
+CC-BY-NC-SA 4.0 — free for research; commercial use needs a license from
+audEERING.
 
 ## Piping the transcript into word2psy
 

@@ -87,7 +87,18 @@ an audio–text embedding space the way viz2psy's `clip` and word2psy's
   data `data/music_emotion_probe.{npz,json}` — ~4 KB coefficient matrix
   plus provenance with CV numbers — reproduced by
   `scripts/train_deam_probe.py`; embeddings are recomputed even when
-  `clap` also runs, a known deferred optimization). Event level: `beats`
+  `clap` also runs, a known deferred optimization), `speech_emotion`
+  (audeering `wav2vec2-large-robust-12-ft-emotion-msp-dim` →
+  `speech_emotion_valence`/`_arousal`/`_dominance` in the model's native
+  ~0–1 (deliberately NOT rescaled — music_emotion's [-1,1] comes from its
+  DEAM training targets, not a rescale); 4 s context windows at the grid
+  hop, 16 kHz, MPS w/ CPU fallback; **Silero-VAD-gated** — windows with
+  mean speech prob < 0.25 are NaN, else the model hallucinates affect on
+  music; the custom regression-head class from the model card needed
+  `post_init()` instead of its 4.x-era `init_weights()` under
+  transformers 5, verified bit-for-bit against the card's reference
+  output; weights ungated but CC-BY-NC-SA research-only, documented in
+  README; no new deps). Event level: `beats`
   (beat_this,
   optional `[beats]` extra since it's a git dep — madmom is dead
   upstream; CPU inference; one row per beat with `is_downbeat`, sidecar
@@ -302,6 +313,36 @@ deferred fix.
    - *runtime*: 8.2 s for the 14 s clip on CPU (M-series), incl. ~5 s
      pipeline load — fine for 3–6 min clips.
 
+6. **v0.5 — speech_emotion** (done Aug 2026): dimensional vocal affect
+   (Wagner et al. 2023 TPAMI model; CCC .745 arousal / .634 dominance /
+   .638 valence on MSP-Podcast — the released 12-layer prune matches the
+   full model). Checkpoint decisions: audeering model over emotion2vec
+   (categorical would duplicate word2psy's GoEmotions) and over training
+   our own probe (MSP-Podcast needs a data agreement, unlike DEAM);
+   native ~0–1 scale kept; dominance included; no per-segment transcript
+   summary; psyquilt gained a separate 3-d `speech_emotion` profile (no
+   collision — psyquilt matches `speech_prob` exactly, there is no
+   `speech_*` pattern), NOT folded into `acoustic` (the music_emotion
+   precedent); family-wide naming revisit deferred until models settle.
+   Tests: 62 offline (+4: windowing + VAD gating, which run offline since
+   Silero ships with faster-whisper) + 1 behind `weights`. Validation
+   (Aug 2026):
+   - *CREMA-D* (16 clips, 4 actors × ANG/HAP/SAD/NEU, same sentence —
+     lexical content controlled): arousal ANG .755 / HAP .608 ≫ NEU .295
+     / SAD .266; valence HAP > ANG in 4/4 actors, arousal ANG > SAD in
+     4/4; dominance peaks on ANG (.742), as theory says.
+   - *rate manipulation*: same sentence at `say -r 110` vs `-r 320` →
+     arousal .394 → .637.
+   - *gating*: 20 s music clip → 40/40 windows NaN; dense dialogue →
+     0/29 gated.
+   - *per-speaker affect*: frames grouped by diarized turns give
+     per-speaker VAD means on the dialogue clip (the diarize+affect
+     combo recipe, now in README).
+   - *psyquilt*: combined frames CSV detects `speech_emotion` as its own
+     3-d profile; `acoustic` stays 5-d (registry change committed in
+     psyquilt, 53 tests pass).
+   - *runtime*: 4.4 s for the 14 s clip on MPS (~3× real time).
+
 ### Explicitly deferred (do not build without discussion)
 
 - **Temporal music-emotion model** — sequence model over CLAP embeddings
@@ -320,9 +361,13 @@ deferred fix.
   per-window gender — 10 s windows straddle dialogue turns and CLAP
   encodes speaker attributes weakly; don't reach for it for speaker
   tasks.
-- **Prosodic-emotion models** — how a line is said vs. its content; a
-  different affective signal than word2psy's text `emotion`. openSMILE
-  eGeMAPS is the standard feature set (non-OSI license — optional extra).
+- **eGeMAPS prosodic features** — the affect-*prediction* side shipped as
+  `speech_emotion` in v0.5; what remains deferred is openSMILE's
+  interpretable feature set (jitter, shimmer, HNR…) for researchers who
+  want raw prosody rather than model judgments (non-OSI license —
+  optional extra). Caveat to carry into any speech-affect docs: the
+  wav2vec2 model's valence partly encodes implicit linguistic content
+  (Wagner et al. 2023) — not a pure prosody signal.
 - **SRT/VTT subtitle ingestion** as an alternate transcription input
   (useful for full-length commercial films where verbatim SRTs exist).
 - **Chords / section labeling** — chroma + key clarity capture most tonal

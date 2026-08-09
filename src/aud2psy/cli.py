@@ -20,6 +20,7 @@ MODEL_REGISTRY: dict[str, tuple[str, str, str]] = {
     "speech": ("aud2psy.models.speech", "SpeechModel", "Speech presence probability (Silero VAD)"),
     "clap": ("aud2psy.models.clap", "ClapModel", "512-d CLAP audio embeddings (shared space with word2psy clap_text)"),
     "music_emotion": ("aud2psy.models.music_emotion", "MusicEmotionModel", "Musical valence/arousal (DEAM-trained probe on CLAP)"),
+    "speech_emotion": ("aud2psy.models.speech_emotion", "SpeechEmotionModel", "Vocal arousal/dominance/valence (wav2vec2 MSP-Podcast; VAD-gated)"),
     "beats": ("aud2psy.models.beats", "BeatsModel", "Beat/downbeat event table (beat_this; needs the [beats] extra)"),
     "diarize": ("aud2psy.models.diarize", "DiarizeModel", "Speaker turn table (pyannote community-1; needs the [diarize] extra + HF token)"),
     "transcribe": ("aud2psy.models.transcribe", "TranscribeModel", "Time-stamped transcript export for word2psy (faster-whisper)"),
