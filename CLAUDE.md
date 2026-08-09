@@ -575,6 +575,9 @@ in a forced aligner themselves.
     validation Ben runs locally; drop rule: delete failing categories
     from PROMPT_BANK (a no-op for other columns under raw cosine); fall
     back to BEATs (MIT) if zero-shot underperforms broadly.
+    **`VALIDATION.md` (repo root) is the live checklist for this local
+    pass** — fill it in, fold the numbers back into this entry, then
+    delete it.
 
 ### Explicitly deferred (do not build without discussion)
 
