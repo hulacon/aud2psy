@@ -98,7 +98,23 @@ an audio–text embedding space the way viz2psy's `clip` and word2psy's
   `post_init()` instead of its 4.x-era `init_weights()` under
   transformers 5, verified bit-for-bit against the card's reference
   output; weights ungated but CC-BY-NC-SA research-only, documented in
-  README; no new deps). Event level: `beats`
+  README; no new deps), `egemaps` (the 25 eGeMAPSv02 LLDs via the
+  `opensmile` wrapper — optional `[egemaps]` extra (audEERING
+  research-only license; also in dev deps since it's offline and
+  weightless, so the tests always run); 16 kHz input shared with
+  Silero; openSMILE names carry `-`/`.` so they're sanitized to
+  `egemaps_*` keys with the raw mapping recorded in the sidecar; the
+  15 pitch-synchronous `_sma3nz` columns get exact-0 unvoiced
+  sentinel → NaN before `Grid.average` (openSMILE's own "nz"
+  functional convention), then the whole voiced set — including
+  formants, which LPC computes even on noise — is Silero-gated per
+  grid window reusing speech_emotion's `speech_fraction` + threshold;
+  the 10 general-audio columns (loudness/spectral balance/MFCC 1–4/
+  flux) stay ungated. Pipeline additions for this: models may set
+  `info_` for extra sidecar fields, and the embedding-pattern sidecar
+  branch now requires numeric `name_NNN` suffixes (`_is_embedding`)
+  so 25 named columns aren't squashed into a clap-style pattern).
+  Event level: `beats`
   (beat_this,
   optional `[beats]` extra since it's a git dep — madmom is dead
   upstream; CPU inference; one row per beat with `is_downbeat`, sidecar
@@ -147,7 +163,7 @@ an audio–text embedding space the way viz2psy's `clip` and word2psy's
   (default **large-v3**), `--language`, `--list-models`. No `-o` → frames
   CSV to stdout.
 - **`tests/`** — offline synthetic suite (sine/noise/silence with
-  closed-form ground truth per feature; 35 tests, ~3 s); transcription
+  closed-form ground truth per feature; 69 tests, ~5 s); transcription
   tests behind the `transcription` marker (deselected by default via
   `addopts`; they synthesize speech with macOS `say` and use Whisper
   `small` to stay light).
@@ -344,6 +360,82 @@ in a forced aligner themselves.
      psyquilt, 53 tests pass).
    - *runtime*: 4.4 s for the 14 s clip on MPS (~3× real time).
 
+7. **v0.6 — egemaps** (done Aug 2026): the interpretable-prosody
+   complement to speech_emotion (Eyben et al. 2016 eGeMAPSv02 LLDs).
+   Checkpoint decisions (Ben, Aug 2026): eGeMAPS before verbatim mode;
+   LLD level + `Grid.average` only, never openSMILE functionals (Grid
+   is our windowing layer); VAD-gate the voiced set, general set
+   ungated; sanitized `egemaps_*` naming; own 25-d psyquilt profile
+   (not folded into `acoustic`); `opensmile` in both the `[egemaps]`
+   extra and dev deps (offline + weightless, unlike the other extras).
+   Also fixed pyproject `version` drift (was stuck at 0.3.1 while
+   `__init__` advanced). Research notes: no OSI-licensed eGeMAPS
+   reimplementation exists (openSMILE is the reference); Parselmouth
+   is GPL-3 with Praat frozen at 6.1.38 — worse for us, not better;
+   nkululeko/senselab ship opensmile as a *required* dep of
+   MIT/Apache packages, so our optional extra is conservative; the
+   PyPI "MIT" classifier on opensmile is a metadata bug. Tests: 69
+   offline (+7: mapping sanity, sine f0 ground truth, unvoiced
+   sentinel, amplitude tracking, real-VAD gating, pipeline/sidecar,
+   `_is_embedding`). Validation (Aug 2026, synthetic stimuli):
+   - *ground truth*: 220 Hz sine → `egemaps_f0_semitone` 35.98 vs
+     12·log2(220/27.5) = 36.00; jitter < .02, HNR > 10 dB.
+   - *speech*: same-sentence `say` male/female clips → median f0
+     111/170 Hz (pyin: 110/172 — the v0.3.1 voice_gender anchors);
+     median |f0 disagreement| vs pyin .31/.20 semitones on voiced
+     frames; `egemaps_loudness` vs `loudness_rms` r = .89/.94;
+     formants shift up female vs male (F1 665 vs 602, F2 1714 vs
+     1642 Hz), jitter/shimmer/HNR in plausible speech ranges.
+   - *gating*: 20 s 120-BPM melody+percussion clip (max speech_prob
+     .15) → all 15 voiced columns NaN in all 40 windows, all 10
+     general columns finite.
+   - *psyquilt*: `egemaps` detected as its own 25-d profile,
+     `acoustic` stays 5-d (registry change in psyquilt, 53 tests
+     pass).
+   - *runtime*: 1.4 s for a 5 s clip on CPU including openSMILE+VAD
+     init — negligible next to the torch models.
+
+### Next (approved Aug 2026, in order)
+
+- **v0.7 — verbatim transcription mode** (`--verbatim` on
+  `transcribe`): swap the faster-whisper checkpoint for the official
+  CT2 conversion of CrisperWhisper **v1**
+  (https://huggingface.co/nyrahealth/faster_CrisperWhisper —
+  CC-BY-NC-4.0, English+German, fillers as bracketed tags). Ben chose
+  this over the July 2026 **CrisperWhisper 2.0** (Interspeech 2026,
+  https://arxiv.org/abs/2607.18934): 2.0 is better (multilingual,
+  controllable verbatim/intended modes, 29.6 ms word-boundary error,
+  disfluency F1 87.8 vs v1's 64.8) but has **no faster-whisper path**
+  — its own pip package with a forked-CTranslate2 NVIDIA-only fast
+  path or an eager-attention transformers backend with no MPS branch,
+  unverified transformers-5 compat, gated custom non-commercial
+  license (moved orgs to `nyralabs`). v1-CT2 is a checkpoint swap on
+  our existing stack; its CT2 conversion does *not* guarantee the
+  paper's timestamp accuracy (retrained-head DTW doesn't convert) —
+  a difference of degree within the README's existing word-timestamp
+  caveat. Sub-questions to resolve at build: keep `[UH]`-style tags
+  verbatim in `text` vs an `is_filler` word column; whether
+  `--verbatim` disables `vad_filter` (it may trim the pauses/fillers
+  the mode exists to keep — test both); strip bracketed tags from
+  recall matching. Document 2.0 as the upgrade path; revisit once its
+  Mac/transformers-5 story is verifiable. Also rejected: post-hoc
+  disfluency classifiers (vanilla Whisper deletes fillers before any
+  classifier sees them), whisper-timestamped's `[*]` markers
+  (position-only), Parakeet/Canary (no verbatim support).
+- **v0.8+ — the endgame trio** (survey Aug 2026: CANLab scoping
+  review, Giordano et al. 2023 Nat Neurosci, pliers): `sound_events`
+  (AudioSet-style scene/event tags — the one big evidenced gap; try a
+  zero-shot prompt bank against our existing CLAP embeddings first —
+  near-free, subsumes laughter detection and music-presence; mind the
+  gender-at-chance negative finding: validate per category, fall back
+  to BEATs (MIT) if zero-shot underperforms); `psychoacoustic` via
+  MoSQITo (Apache-2.0, pure Python: Zwicker loudness/sharpness/
+  roughness/fluctuation strength — completes the Alluri/Toiviainen
+  canon, roughness is the headline missing regressor); `timbre`
+  librosa one-liners (MFCCs — the most common encoding-model
+  regressor, spectral contrast, flatness). After these the registry
+  is considered complete pending real-user demand.
+
 ### Explicitly deferred (do not build without discussion)
 
 - **Temporal music-emotion model** — sequence model over CLAP embeddings
@@ -357,10 +449,7 @@ in a forced aligner themselves.
   carry. The family's contract is wide-sweep feature tables, honestly
   caveated — the README's word-timestamp caveat (N.B. above) stays as
   the permanent answer, pointing precision users out of scope.
-- **Verbatim/disfluency mode** — vanilla Whisper silently deletes fillers
-  and repetitions; CrisperWhisper (https://arxiv.org/abs/2408.16589)
-  preserves them with timed filler events. Needed before anyone uses our
-  transcripts for fluency/pause-content research.
+- ~~Verbatim/disfluency mode~~ — **promoted to v0.7** (see Next above).
 - ~~Speaker diarization~~ — **shipped in v0.4** (see roadmap). The
   v0.3.1 `median_f0`/`voice_gender` columns remain as the no-dep
   fallback. Negative finding worth remembering: zero-shot CLAP against
@@ -368,13 +457,10 @@ in a forced aligner themselves.
   per-window gender — 10 s windows straddle dialogue turns and CLAP
   encodes speaker attributes weakly; don't reach for it for speaker
   tasks.
-- **eGeMAPS prosodic features** — the affect-*prediction* side shipped as
-  `speech_emotion` in v0.5; what remains deferred is openSMILE's
-  interpretable feature set (jitter, shimmer, HNR…) for researchers who
-  want raw prosody rather than model judgments (non-OSI license —
-  optional extra). Caveat to carry into any speech-affect docs: the
-  wav2vec2 model's valence partly encodes implicit linguistic content
-  (Wagner et al. 2023) — not a pure prosody signal.
+- ~~eGeMAPS prosodic features~~ — **shipped in v0.6** (see roadmap).
+  Caveat to carry into any speech-affect docs: the wav2vec2 model's
+  valence partly encodes implicit linguistic content (Wagner et al.
+  2023) — not a pure prosody signal.
 - **SRT/VTT subtitle ingestion** as an alternate transcription input
   (useful for full-length commercial films where verbatim SRTs exist).
 - **Chords / section labeling** — chroma + key clarity capture most tonal
@@ -386,6 +472,22 @@ in a forced aligner themselves.
 - **Chronset-style speech-onset latency** — validated voice-key
   replacement (<50 ms error) with no maintained Python equivalent; only
   relevant if single-trial RT users show up.
+- **wav2vec2 layer-embedding export** — intermediate-layer speech
+  embeddings as encoding-model features (the dominant 2025–26
+  naturalistic-fMRI methods trend; nearly free since speech_emotion
+  already runs the forward pass). Wait for a user with an encoding
+  model in hand.
+- **Spectrotemporal modulation energy** — the canonical
+  auditory-cortex model (Santoro 2014 lineage), the most
+  neuroscience-native feature family we lack, but no maintained Python
+  tooling exists; would be bespoke scipy work. Watch.
+- **Ruled out in the Aug 2026 survey** (don't re-research): Meta
+  Audiobox-Aesthetics (built for filtering generative audio, no
+  psychology uptake); timbral_models (unmaintained); dedicated
+  laughter detectors (all stale or research-only weights — laughter is
+  an AudioSet class, `sound_events` covers it); inaSpeechSegmenter for
+  music presence (TensorFlow dep clashes with the torch stack —
+  `sound_events` covers it too).
 
 Prior art to consult before expanding the registry: `pliers` (Yarkoni lab
 multimodal extraction), studyforrest movie annotations, CANLab's

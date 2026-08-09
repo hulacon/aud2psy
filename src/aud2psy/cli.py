@@ -21,6 +21,7 @@ MODEL_REGISTRY: dict[str, tuple[str, str, str]] = {
     "clap": ("aud2psy.models.clap", "ClapModel", "512-d CLAP audio embeddings (shared space with word2psy clap_text)"),
     "music_emotion": ("aud2psy.models.music_emotion", "MusicEmotionModel", "Musical valence/arousal (DEAM-trained probe on CLAP)"),
     "speech_emotion": ("aud2psy.models.speech_emotion", "SpeechEmotionModel", "Vocal arousal/dominance/valence (wav2vec2 MSP-Podcast; VAD-gated)"),
+    "egemaps": ("aud2psy.models.egemaps", "EgemapsModel", "25 eGeMAPS prosody/voice-quality LLDs (openSMILE; needs the [egemaps] extra)"),
     "beats": ("aud2psy.models.beats", "BeatsModel", "Beat/downbeat event table (beat_this; needs the [beats] extra)"),
     "diarize": ("aud2psy.models.diarize", "DiarizeModel", "Speaker turn table (pyannote community-1; needs the [diarize] extra + HF token)"),
     "transcribe": ("aud2psy.models.transcribe", "TranscribeModel", "Time-stamped transcript export for word2psy (faster-whisper)"),
@@ -115,6 +116,13 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
             models.remove("diarize")
+        if importlib.util.find_spec("opensmile") is None:
+            print(
+                "note: skipping egemaps (optional dependency not installed; "
+                'pip install "aud2psy[egemaps]")',
+                file=sys.stderr,
+            )
+            models.remove("egemaps")
     if not models:
         parser.error("no models requested; name models before the input file or use --all")
     unknown = [m for m in models if m not in MODEL_REGISTRY]

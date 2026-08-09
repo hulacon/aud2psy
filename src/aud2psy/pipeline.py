@@ -54,6 +54,15 @@ def annotate_voice_gender(transcript_df: pd.DataFrame, frames_df: pd.DataFrame, 
     transcript_df["voice_gender"] = gender
 
 
+def _is_embedding(name: str, feature_names: list[str]) -> bool:
+    """Numbered-dimension outputs (clap_000...) vs distinct named columns."""
+    import re
+
+    return len(feature_names) > 16 and all(
+        re.fullmatch(rf"{re.escape(name)}_\d+", f) for f in feature_names
+    )
+
+
 def get_model(name: str, **kwargs):
     """Instantiate a registered model by name (lazy import)."""
     from .cli import MODEL_REGISTRY
@@ -126,7 +135,7 @@ def score_audio(
             for feat, values in features.items():
                 columns[feat] = values
             names = list(features)
-            if len(names) > 16:  # embeddings: record the pattern, not 512 names
+            if _is_embedding(name, names):  # record the pattern, not 512 names
                 model_meta[name] = {
                     "pattern": f"{name}_{{NNN}}",
                     "range": [0, len(names) - 1],
@@ -138,6 +147,9 @@ def score_audio(
                     "columns": names,
                     "runtime_sec": round(time.time() - t_model, 2),
                 }
+            info = getattr(model, "info_", None)
+            if info:
+                model_meta[name].update(info)
         frames_df = pd.DataFrame(columns)
 
     if do_beats:

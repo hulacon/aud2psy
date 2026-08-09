@@ -72,6 +72,7 @@ speaker-identity tracking, use the `diarize` model (below).
 | `clap` | frame | `clap_000`…`clap_511`: LAION-CLAP audio embeddings in a shared space with word2psy's `clap_text` (10 s windows; `--clap-model` to change checkpoint) |
 | `music_emotion` | frame | `music_emotion_valence`, `music_emotion_arousal` in [−1, 1]: DEAM-trained probe on CLAP embeddings. Discriminates affective levels between clips/sections (held-out song-level r = .71/.84); not a beat-to-beat tracker |
 | `speech_emotion` | frame | `speech_emotion_valence`, `_arousal`, `_dominance` (~0–1): vocal affect from [audeering's wav2vec2 MSP-Podcast model](https://huggingface.co/audeering/wav2vec2-large-robust-12-ft-emotion-msp-dim) in 4 s windows; NaN where the window isn't speech (Silero-gated). Weights are CC-BY-NC-SA (research use) |
+| `egemaps` | frame | the 25 [eGeMAPS](https://audeering.github.io/opensmile/) v02 low-level descriptors via openSMILE: `egemaps_loudness`, spectral balance (`_alpha_ratio`, `_hammarberg`, `_slope_0_500`, `_slope_500_1500`, `_flux`), `_mfcc1`–`4`, and a voiced set (`_f0_semitone`, `_jitter`, `_shimmer`, `_hnr`, `_h1_h2`, `_h1_a3`, formant `_f1/f2/f3_freq/_bw/_amp`) that is NaN off-speech (Silero-gated); needs `pip install "aud2psy[egemaps]"` |
 | `beats` | events | beat/downbeat table (`time`, `is_downbeat`) via [beat_this](https://github.com/CPJKU/beat_this); needs `pip install "aud2psy[beats]"` |
 | `diarize` | events | speaker turn table via [pyannote community-1](https://huggingface.co/pyannote/speaker-diarization-community-1); needs `pip install "aud2psy[diarize]"` + a HuggingFace token (see below) |
 | `transcribe` | segment | time-stamped transcript export (faster-whisper, default `large-v3`; `--whisper-model` to change) |
@@ -118,6 +119,36 @@ purely paralinguistic dimensions), and overlapping *human* non-speech
 sound (crowds, babble) is its worst-case interference. The weights are
 CC-BY-NC-SA 4.0 — free for research; commercial use needs a license from
 audEERING.
+
+## Interpretable prosody (egemaps)
+
+Where `speech_emotion` gives model *judgments* of vocal affect, `egemaps`
+gives the raw interpretable prosody and voice-quality measures those
+judgments are usually explained with: the 25 eGeMAPSv02 low-level
+descriptors (Eyben et al. 2016, IEEE TAC) computed by openSMILE — the
+reference implementation — at its native ~10 ms hop, averaged onto the
+frame grid.
+
+```bash
+pip install "aud2psy[egemaps]"
+aud2psy egemaps clip.mp4 -o scores.csv
+```
+
+Two NaN conventions keep the columns honest. Pitch-dependent measures
+(F0, jitter, shimmer, HNR, H1–H2, H1–A3) are NaN on unvoiced frames (the
+`pitch_f0` convention). And the whole voiced set — including formants —
+is NaN wherever a window isn't speech (Silero-gated, the `speech_emotion`
+threshold): "jitter" measured on a violin line is not voice quality. The
+general-audio columns (loudness, spectral balance, MFCCs, flux) are
+computed everywhere. The sidecar records each column's original openSMILE
+name.
+
+Caveats: jitter and shimmer are sensitive to recording quality and
+background sound even within speech; and openSMILE is free for academic
+and other non-commercial research under audEERING's research license —
+use inside commercial products needs a
+[commercial license from audEERING](https://audeering.github.io/opensmile/about.html)
+(the reason this is an opt-in extra).
 
 ## Piping the transcript into word2psy
 

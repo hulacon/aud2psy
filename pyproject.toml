@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aud2psy"
-version = "0.3.1"
+version = "0.6.0"
 description = "Extract psychological and acoustic features from audio (and the audio stream of video), including time-stamped transcription"
 readme = "README.md"
 license = "MIT"
@@ -44,11 +44,14 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "ipython"]
+# opensmile in dev so the egemaps tests run in CI (offline, no weights)
+dev = ["pytest", "ipython", "opensmile>=2.5"]
 # beat_this is not on PyPI; the git reference keeps this an opt-in extra
 beats = ["beat_this @ git+https://github.com/CPJKU/beat_this"]
 # gated weights (one-time HF license acceptance + token) keep this opt-in too
 diarize = ["pyannote.audio>=4.0"]
+# openSMILE binaries are audEERING research-license (non-commercial) — opt-in
+egemaps = ["opensmile>=2.5"]
 
 [project.scripts]
 aud2psy = "aud2psy.cli:main"
