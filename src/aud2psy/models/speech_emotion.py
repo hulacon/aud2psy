@@ -72,6 +72,7 @@ class SpeechEmotionModel(BaseModel):
     name = "speech_emotion"
     level = "frame"
     input_sr = 16000  # the model's native rate; also what Silero VAD wants
+    checkpoint = CHECKPOINT
 
     def __init__(self, device: str | None = None):
         self.device = device or auto_device()

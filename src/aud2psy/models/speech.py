@@ -16,6 +16,18 @@ VAD_SR = 16000
 VAD_WINDOW = 512  # samples per probability at 16 kHz
 
 
+def _silero_asset_name() -> str:
+    """The bundled Silero ONNX asset — the actual weights identity, which
+    tracks the installed faster-whisper rather than a hardcoded string."""
+    import glob
+    import os
+
+    from faster_whisper.utils import get_assets_path
+
+    assets = sorted(glob.glob(os.path.join(get_assets_path(), "silero_vad*.onnx")))
+    return os.path.basename(assets[0]) if assets else "silero-vad"
+
+
 class SpeechModel(BaseModel):
     name = "speech"
     level = "frame"
@@ -24,6 +36,7 @@ class SpeechModel(BaseModel):
         from faster_whisper.vad import get_vad_model
 
         self.model = get_vad_model()
+        self.checkpoint = _silero_asset_name()  # e.g. "silero_vad_v6.onnx"
 
     def extract(self, y: np.ndarray, sr: int, grid) -> dict[str, np.ndarray]:
         import librosa

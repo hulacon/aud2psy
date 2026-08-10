@@ -6,6 +6,38 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
+def get_model_version(model_name: str) -> str:
+    """Version of the underlying package (the word2psy/viz2psy pattern)."""
+    version_map = {
+        "loudness": ("librosa", None),
+        "pitch": ("librosa", None),
+        "spectral": ("librosa", None),
+        "onsets": ("librosa", None),
+        "tonal": ("librosa", None),
+        "rhythm": ("librosa", None),
+        "timbre": ("librosa", None),
+        "psychoacoustic": ("mosqito", None),
+        "speech": ("faster-whisper", None),  # bundled Silero VAD
+        "transcribe": ("faster-whisper", None),
+        "clap": ("transformers", None),
+        "music_emotion": ("transformers", None),
+        "sound_events": ("transformers", None),
+        "speech_emotion": ("transformers", None),
+        "egemaps": ("opensmile", None),
+        "beats": ("beat_this", None),
+        "diarize": ("pyannote.audio", None),
+    }
+    pkg, fallback = version_map.get(model_name, (None, "unknown"))
+    if pkg:
+        try:
+            from importlib.metadata import version
+
+            return version(pkg)
+        except Exception:
+            pass
+    return fallback or "unknown"
+
+
 def build_sidecar(
     input_path: Path,
     input_type: str,
@@ -22,7 +54,10 @@ def build_sidecar(
     from . import __version__
 
     meta: dict = {
-        "aud2psy_version": __version__,
+        "schema_version": "1.0",  # Contract B §4.1 extractor output convention
+        "extractor": "aud2psy",
+        "extractor_version": __version__,
+        "aud2psy_version": __version__,  # legacy key, one deprecation cycle
         "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "input": {
             "type": input_type,

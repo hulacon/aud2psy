@@ -55,6 +55,9 @@ def build_parser() -> argparse.ArgumentParser:
                              "scores_transcript.csv, scores.meta.json "
                              "(default: print frames CSV to stdout)")
     parser.add_argument("--all", action="store_true", help="run every registered model")
+    parser.add_argument("--stimulus-id", default=None, metavar="ID",
+                        help="stimulus_id value for all output rows "
+                             "(default: input file's stem)")
     parser.add_argument("--hop", type=float, default=0.5, metavar="SEC",
                         help="frame-level window size in seconds (default: 0.5, "
                              "matching viz2psy's video frame interval)")
@@ -310,7 +313,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     if args.output:
-        written = save_result(result, args.output)
+        written = save_result(result, args.output, stimulus_id=args.stimulus_id)
         for kind, path in written.items():
             print(f"{kind}: {path}")
         if result.transcript_df is not None and len(result.transcript_df) == 0:

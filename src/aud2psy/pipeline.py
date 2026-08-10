@@ -11,7 +11,7 @@ import pandas as pd
 
 from .audio import FEATURE_SR, WHISPER_SR, input_type, load_audio
 from .grid import Grid
-from .metadata import build_sidecar
+from .metadata import build_sidecar, get_model_version
 
 
 @dataclass
@@ -151,9 +151,11 @@ def score_audio(
                     "columns": names,
                     "runtime_sec": round(time.time() - t_model, 2),
                 }
+            model_meta[name]["package_version"] = get_model_version(name)
+            model_meta[name]["checkpoint"] = getattr(model, "checkpoint", None)
             info = getattr(model, "info_", None)
             if info:
-                model_meta[name].update(info)
+                model_meta[name].update(info)  # an info_ checkpoint is authoritative
         frames_df = pd.DataFrame(columns)
 
     if do_beats:
@@ -165,6 +167,8 @@ def score_audio(
         model_meta["beats"] = {
             "columns": list(beats_df.columns),
             "runtime_sec": round(time.time() - t_model, 2),
+            "package_version": get_model_version("beats"),
+            "checkpoint": getattr(model, "checkpoint", None),
         }
 
     speakers_df = exclusive_df = None
@@ -180,6 +184,8 @@ def score_audio(
         model_meta["diarize"] = {
             "columns": list(speakers_df.columns),
             "runtime_sec": round(time.time() - t_model, 2),
+            "package_version": get_model_version("diarize"),
+            "checkpoint": getattr(model, "checkpoint", None),
         }
 
     transcript_df = words_df = recall_df = None
@@ -198,6 +204,8 @@ def score_audio(
         model_meta["transcribe"] = {
             "columns": list(transcript_df.columns),
             "runtime_sec": round(time.time() - t_model, 2),
+            "package_version": get_model_version("transcribe"),
+            "checkpoint": whisper_model,  # actual id, incl. the verbatim swap
         }
         from .recall import annotate_recall, load_wordpool, recall_summary, speech_timing
 
@@ -247,37 +255,55 @@ def score_audio(
     )
 
 
-def save_result(result: ScoreResult, out_path: str | Path) -> dict[str, Path]:
+def save_result(
+    result: ScoreResult,
+    out_path: str | Path,
+    stimulus_id: str | None = None,
+) -> dict[str, Path]:
     """Write the family-standard file set next to ``out_path``.
 
     -o scores.csv produces scores_frames.csv, scores_transcript.csv,
     scores_transcript_words.csv (each only if its table exists), and
     scores.meta.json.
+
+    Every table leads with a ``stimulus_id`` column (Contract B §4.1):
+    the input file's stem by default, ``stimulus_id`` to override
+    (``time``/``onset`` disambiguate rows within the stimulus).
     """
     import json
 
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     stem = out_path.parent / out_path.stem
+    if stimulus_id is None:
+        input_path = result.meta.get("input", {}).get("path")
+        stimulus_id = Path(input_path).stem if input_path else None
+
+    def _write(df, path: Path) -> None:
+        if stimulus_id is not None and "stimulus_id" not in df.columns:
+            df = df.copy()
+            df.insert(0, "stimulus_id", stimulus_id)
+        df.to_csv(path, index=False, float_format="%.6g")
+
     written: dict[str, Path] = {}
     if result.frames_df is not None:
         written["frames"] = Path(f"{stem}_frames.csv")
-        result.frames_df.to_csv(written["frames"], index=False, float_format="%.6g")
+        _write(result.frames_df, written["frames"])
     if result.transcript_df is not None:
         written["transcript"] = Path(f"{stem}_transcript.csv")
-        result.transcript_df.to_csv(written["transcript"], index=False, float_format="%.6g")
+        _write(result.transcript_df, written["transcript"])
     if result.words_df is not None:
         written["transcript_words"] = Path(f"{stem}_transcript_words.csv")
-        result.words_df.to_csv(written["transcript_words"], index=False, float_format="%.6g")
+        _write(result.words_df, written["transcript_words"])
     if result.recall_df is not None:
         written["recall"] = Path(f"{stem}_recall.csv")
-        result.recall_df.to_csv(written["recall"], index=False, float_format="%.6g")
+        _write(result.recall_df, written["recall"])
     if result.beats_df is not None:
         written["beats"] = Path(f"{stem}_beats.csv")
-        result.beats_df.to_csv(written["beats"], index=False, float_format="%.6g")
+        _write(result.beats_df, written["beats"])
     if result.speakers_df is not None:
         written["speakers"] = Path(f"{stem}_speakers.csv")
-        result.speakers_df.to_csv(written["speakers"], index=False, float_format="%.6g")
+        _write(result.speakers_df, written["speakers"])
     meta_path = Path(f"{stem}.meta.json")
     result.meta["output"] = {
         kind: {"path": str(p), "rows": _n_rows(result, kind)} for kind, p in written.items()

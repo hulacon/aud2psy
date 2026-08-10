@@ -22,6 +22,7 @@ DOWNBEAT_TOLERANCE_SEC = 0.03
 class BeatsModel(BaseModel):
     name = "beats"
     level = "events"
+    checkpoint = "beat_this/final0"  # Audio2Beats' default checkpoint_path
 
     def load(self) -> None:
         try:

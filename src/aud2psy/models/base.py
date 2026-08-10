@@ -33,6 +33,10 @@ class BaseModel:
     name: str = "base"
     level: str = "frame"  # "frame", "segment", or "events"
     input_sr: int | None = None  # frame models: decode rate override (e.g. CLAP's 48 kHz)
+    # Contract B §4.1: exact architecture+weights identifier for any model
+    # with learned parameters (e.g. "laion/larger_clap_music_and_speech");
+    # None for analytic/DSP models. Recorded per model in the sidecar.
+    checkpoint: str | None = None
 
     def load(self) -> None:
         """Load weights/resources. Called once before extraction."""

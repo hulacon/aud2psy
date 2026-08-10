@@ -52,12 +52,18 @@ def test_save_result_file_layout(wav_factory, tmp_path):
     assert written["frames"].name == "scores_frames.csv"
     assert written["meta"].name == "scores.meta.json"
     meta = json.loads(written["meta"].read_text())
-    assert meta["aud2psy_version"]
+    assert meta["schema_version"] == "1.0"
+    assert meta["extractor"] == "aud2psy"
+    assert meta["extractor_version"] == meta["aud2psy_version"]  # legacy key kept
     assert meta["input"]["duration_sec"] == 2.0
     assert meta["models"]["loudness"]["columns"] == ["loudness_rms", "loudness_db"]
+    assert meta["models"]["loudness"]["package_version"] not in (None, "unknown")
+    assert meta["models"]["loudness"]["checkpoint"] is None  # analytic DSP model
     assert meta["output"]["frames"]["rows"] == 4
     df = pd.read_csv(written["frames"])
-    assert df.shape == (4, 3)
+    assert df.shape == (4, 4)
+    assert df.columns[0] == "stimulus_id"
+    assert set(df["stimulus_id"]) == {path.stem}
 
 
 def test_cli_end_to_end(wav_factory, tmp_path, capsys):

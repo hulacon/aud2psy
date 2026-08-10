@@ -37,6 +37,7 @@ GATED_HELP = (
 class DiarizeModel(BaseModel):
     name = "diarize"
     level = "events"
+    checkpoint = DEFAULT_PIPELINE
 
     def __init__(self, num_speakers: int | None = None):
         self.num_speakers = num_speakers

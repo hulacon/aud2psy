@@ -85,6 +85,7 @@ class TranscribeModel(BaseModel):
                 )
             whisper_model = VERBATIM_CHECKPOINT
         self.whisper_model = whisper_model
+        self.checkpoint = whisper_model  # Contract B §4.1 alias of whisper_model
         self.language = language
         self.verbatim = verbatim
 
