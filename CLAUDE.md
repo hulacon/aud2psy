@@ -108,7 +108,12 @@ an audio–text embedding space the way viz2psy's `clip` and word2psy's
   checkpoint/sr/centers in `ClapModel.embed_windows`, attached by the
   pipeline to any model exposing `embed_windows`, in-memory only —
   so `clap` + `music_emotion` + `sound_events` cost one forward pass,
-  not three; weights still load per model), `sound_events`
+  not three; weights still load per model; **silence-gated** like
+  `sound_events` — on digital silence the probe returns valence −.294 /
+  arousal −.245, inside the range real music produces and therefore
+  undetectable downstream, the `speech_emotion` gating precedent;
+  `clap` itself stays ungated so psyquilt gets a complete matrix),
+  `sound_events`
   (16 zero-shot event tags — speech/music/singing/laughter/crying/
   shouting/crowd/applause/footsteps/vehicle/water/wind/animals/
   gunshot_explosion/siren_alarm/thunder — scored as **raw cosine** of
@@ -121,7 +126,17 @@ an audio–text embedding space the way viz2psy's `clip` and word2psy's
   baselines differ so cross-column comparison is ordinal at best —
   documented in the sidecar, which records the full prompt bank; no
   speaker-attribute categories (the recorded gender-at-chance negative
-  finding); failed categories are deleted from PROMPT_BANK, which
+  finding); **silence-gated** since Aug 2026 — all 16 columns NaN when
+  the 10 s CLAP context window is below `clap.SILENCE_DBFS` (−80 dBFS
+  RMS), because on digital silence the embedding collapses to a fixed
+  degenerate point and the whole bank inflates (music .294 /
+  gunshot_explosion .309 on `np.zeros`, above their own target
+  stimuli — this failed §1 validation for `music`); deliberately NOT a
+  quiet-scene threshold, since CLAP is level-invariant for real content
+  (same melody: music .211 at −60 dBFS, .200 at −20 dBFS), so the gate
+  fires only on muted/black/gap audio and measures the *context*
+  window via `clap.window_starts`, shared with the embedder so the two
+  can't drift; failed categories are deleted from PROMPT_BANK, which
   changes nothing else under raw cosine;
   `scripts/validate_sound_events.py` = per-category validation),
   `speech_emotion`

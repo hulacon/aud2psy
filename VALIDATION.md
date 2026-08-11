@@ -13,11 +13,15 @@ into CLAUDE.md's roadmap entry 11 (which currently carries the
 
 ## 1. sound_events — synthetic target separation
 
-- [ ] `pytest -m weights tests/test_sound_events.py` — asserts each
+- [x] `pytest -m weights tests/test_sound_events.py` — asserts each
   synthesizable target column peaks on its own stimulus
   (water←rain, siren_alarm←siren, music←music, wind←wind,
   applause←applause, thunder←thunder, gunshot_explosion←gunshots).
-- [ ] `python scripts/validate_sound_events.py` — prints the full
+  **PASSES** post-gate (11 Aug 2026). Pre-gate it failed on `music`;
+  the cause was the silence artifact, not the category — see below.
+  The `gunshots` pair is commented out of the assertion pending a
+  real-clip re-probe (Ben's call, 11 Aug 2026).
+- [x] `python scripts/validate_sound_events.py` — prints the full
   stimulus × category cosine matrix + per-target rank/margin
   diagnostics ("OK"/"FAIL" per row; siren and alarm are both valid
   peaks for `siren_alarm`).
@@ -29,15 +33,105 @@ controls (tone/noise/silence), margin comfortably positive. A target
 that peaks on the wrong stimulus, or sits within noise of the
 controls, fails.
 
+Run 11 Aug 2026 (M-series MPS, `laion/larger_clap_music_and_speech`,
+10 s synthetic stimuli), **after** the silence gate shipped the same
+day. **6 of 7 pass**; the silence stimulus is now gated to NaN and
+excluded from the ranking.
+
 | category (synthesizable) | target stim | target cosine | best non-target (which) | margin | verdict |
 |---|---|---|---|---|---|
-| water | rain | | | | |
-| siren_alarm | siren (or alarm) | | | | |
-| music | music | | | | |
-| wind | wind | | | | |
-| applause | applause | | | | |
-| thunder | thunder | | | | |
-| gunshot_explosion | gunshots | | | | |
+| water | rain | 0.265 | 0.239 (noise) | +0.026 | OK |
+| siren_alarm | siren (or alarm) | 0.257 | 0.184 (tone) | +0.073 | OK |
+| music | music | 0.257 | 0.169 (tone) | +0.088 | OK |
+| wind | wind | 0.345 | 0.147 (tone) | +0.198 | OK |
+| applause | applause | 0.271 | 0.086 (tone) | +0.185 | OK |
+| thunder | thunder | 0.320 | 0.298 (wind) | +0.022 | OK |
+| gunshot_explosion | gunshots | 0.048 | **0.360 (thunder)** | −0.312 | **FAIL** |
+
+Pre-gate, the same run scored 5 of 7: `music` peaked on **silence**
+(0.294 vs 0.257 on the music stimulus), and silence was also the
+runner-up that suppressed `applause`'s margin (+0.119 → +0.185) and
+`gunshot_explosion`'s (0.309).
+
+### The two failures — neither was a category to drop
+
+**`music` ← silence: a digital-silence artifact affecting the whole
+bank.** The silence column (literal `np.zeros`) is positive for all 16
+categories and is the top stimulus for several: music 0.294,
+gunshot_explosion 0.309, animals 0.208, singing 0.197, vehicle 0.196.
+`music` itself is healthy — 0.257 on the music stimulus, the highest
+of any *real* stimulus, and it tracked correctly on the real recording
+in §2 (0.384 music core vs 0.201 speech core).
+
+A level sweep (10 s stimuli, mean over grid windows) locates the
+pathology and rules out the obvious fix:
+
+| stimulus | RMS dBFS | cos to zeros-embedding | `music` | `gunshot_explosion` |
+|---|---|---|---|---|
+| digital zeros | −∞ | 1.000 | 0.294 | 0.309 |
+| noise | −90 | 0.721 | 0.140 | 0.222 |
+| noise | −80 | 0.639 | 0.091 | 0.180 |
+| noise | −60 | 0.561 | 0.053 | 0.179 |
+| noise | −30 | 0.346 | −0.040 | 0.069 |
+| melody | −60 | 0.491 | 0.211 | 0.176 |
+| melody | −20 | 0.327 | 0.200 | 0.162 |
+
+**CLAP is level-invariant**: the same melody scores `music` 0.211 at
+−60 dBFS and 0.200 at −20 dBFS — 0.011 of drift over 40 dB. So a
+"quiet scene" gate at −50/−60 dBFS would NaN legitimately quiet
+content that the model scores *correctly*, while the actual
+degeneracy is confined to ≲ −80 dBFS.
+
+**Fix shipped 11 Aug 2026** (`clap.SILENCE_DBFS = -80.0`,
+`clap.silent_windows`): `sound_events` and `music_emotion` NaN every
+column when the **10 s context window** — not the 0.5 s grid window,
+since the context is what CLAP embeds — is below −80 dBFS RMS. The
+clamping arithmetic is shared with `_embed_windows` via
+`clap.window_starts` so the gate and the embedder cannot drift apart.
+Sidecar records `silence_gate_dbfs` and `n_windows_silence_gated`.
+This reverses `sound_events.py`'s previous docstring line "No
+NaN/gating: cosine to a unit vector is defined everywhere, silence
+included" (rewritten in place).
+
+Scope decisions (Ben, 11 Aug 2026): `music_emotion` **is** gated — on
+digital silence its probe returns valence −0.294 / arousal −0.245,
+values that sit *inside* the range real music produces, so an ungated
+reading is indistinguishable downstream (the `speech_emotion` VAD-gate
+precedent). `clap` itself is **not** gated: its embedding is a valid
+unit vector, silence is a real acoustic state for an embedding space
+to represent, and NaN rows would punch holes in the 512-d matrix
+psyquilt consumes (whose NaN handling is unverified — psyquilt is not
+checked out on this machine).
+
+Narrowness confirmed on real audio: the toy clip, whose quietest
+section sits at −67 dBFS, gets `n_windows_silence_gated: 0` for both
+models — the gate fires on degenerate input only.
+
+**`gunshot_explosion` ← thunder: probably a stimulus problem.** It
+scored 0.048 on synthetic gunshots while thunder hit 0.360 on the same
+column. Synthetic gunshots are impulsive noise bursts, and
+thunder-vs-explosion is a hard distinction even for humans; per the §2
+protocol constraint, don't judge an impulsive category on a
+synthesized probe.
+
+- [ ] **OPEN**: re-probe `gunshot_explosion` on a real action-film
+  excerpt, then decide (Ben, 11 Aug 2026: wait for the re-probe, do
+  not drop). Until then the pair is commented out of the
+  `weights`-marked assertion in `tests/test_sound_events.py` so the
+  test suite is green on a known-open question rather than red on an
+  unactioned one.
+
+### Separate finding: edge clamping makes head/tail windows identical
+
+`ClapModel._embed_windows` clamps the context start to
+`[0, duration − 10 s]`, so **every grid center within 5 s of either
+end shares one context window** — `sound_events`/`clap`/
+`music_emotion` are constant across the first and last ~5 s of any
+clip. Visible in the toy clip (11 identical rows from 25.25 s to the
+end) and in §2 (58 unique embedding rows out of 76 windows). Correct
+per the docstring's "edge-clamped", but worth stating in user-facing
+docs: those rows are not independent observations, and a clip shorter
+than 10 s yields exactly one.
 
 ## 2. sound_events — human-sound categories (real clips)
 

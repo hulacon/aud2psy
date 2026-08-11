@@ -26,6 +26,47 @@ WINDOW_SEC = 10.0
 BATCH_SIZE = 8
 EMBED_DIM = 512
 
+# Below this context-window RMS the CLAP embedding collapses toward the
+# digital-silence point instead of describing content: measured cosine to
+# the all-zeros embedding runs .64-1.0 at <= -80 dBFS, and the whole
+# sound_events bank inflates there (music .294, gunshot_explosion .309 on
+# np.zeros). Deliberately NOT a "quiet scene" threshold — CLAP is
+# level-invariant for real content (the same melody scores music .211 at
+# -60 dBFS and .200 at -20 dBFS), so gating at a normal noise floor would
+# discard values the model gets right. Real recordings sit at -60 to
+# -70 dBFS; this fires on muted tracks, digital black at export
+# head/tail, and gaps in edited audio. Consumed by `sound_events` and
+# `music_emotion`; `clap` itself stays ungated so its 512-d matrix has no
+# holes for psyquilt (silence is a real acoustic state to embed).
+SILENCE_DBFS = -80.0
+
+
+def window_starts(n_samples: int, sr: int, centers: np.ndarray) -> list[int]:
+    """Sample index where each center's 10 s context window begins,
+    edge-clamped to [0, duration - WINDOW_SEC]. Shared by the embedder and
+    the silence gate so the two can never drift apart."""
+    half = WINDOW_SEC / 2
+    duration = n_samples / sr
+    return [
+        int(min(max(center - half, 0.0), max(duration - WINDOW_SEC, 0.0)) * sr)
+        for center in centers
+    ]
+
+
+def silent_windows(y: np.ndarray, sr: int, centers: np.ndarray) -> np.ndarray:
+    """Bool mask over ``centers``: True where the 10 s context window's RMS
+    is below ``SILENCE_DBFS`` (the embedding is degenerate, not merely
+    quiet). Measured on the context window, not the grid window, because
+    the context is what CLAP actually embeds."""
+    n_win = int(min(len(y), WINDOW_SEC * sr))
+    floor = 10 ** (SILENCE_DBFS / 20)
+    mask = np.zeros(len(centers), dtype=bool)
+    for i, start in enumerate(window_starts(len(y), sr, centers)):
+        window = y[start : start + n_win].astype(np.float64)
+        rms = float(np.sqrt(np.mean(window**2))) if window.size else 0.0
+        mask[i] = rms < floor
+    return mask
+
 
 class ClapModel(BaseModel):
     name = "clap"
@@ -77,14 +118,8 @@ class ClapModel(BaseModel):
         import torch
         from tqdm import tqdm
 
-        half = WINDOW_SEC / 2
-        duration = len(y) / sr
         n_win = int(min(len(y), WINDOW_SEC * sr))
-        starts = []
-        for center in centers:
-            start = min(max(center - half, 0.0), max(duration - WINDOW_SEC, 0.0))
-            starts.append(int(start * sr))
-        windows = [y[s : s + n_win] for s in starts]
+        windows = [y[s : s + n_win] for s in window_starts(len(y), sr, centers)]
 
         out = np.empty((len(centers), EMBED_DIM))
         batches = range(0, len(windows), BATCH_SIZE)

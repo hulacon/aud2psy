@@ -252,9 +252,18 @@ Read the scores as *relative* tag strengths: compare a column over time
 or between clips. Columns have different baselines (an artifact of
 zero-shot prompting), so comparing *across* categories is ordinal at
 best — and the values are similarities, not calibrated probabilities.
-Two recorded limits: CLAP zero-shot performs at chance for speaker
-attributes (the bank deliberately contains none), and categories should
-be validated on stimuli like yours before interpretation —
+Windows whose 10 s CLAP context is essentially digital silence
+(< −80 dBFS RMS: muted tracks, black at export head/tail, gaps in
+edited audio) are **NaN across every category** — the embedding
+collapses there and inflates the whole bank. This is not a quiet-scene
+gate: CLAP is level-invariant for real content, so quiet music still
+scores as music. `music_emotion` carries the same gate; `clap` itself
+does not, so its embedding matrix stays complete.
+
+Two further recorded limits: CLAP zero-shot performs at chance for
+speaker attributes (the bank deliberately contains none), and
+categories should be validated on stimuli like yours before
+interpretation —
 `scripts/validate_sound_events.py` prints per-category separation on
 synthetic target stimuli and profiles any real clips you pass it.
 

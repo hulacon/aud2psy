@@ -92,3 +92,31 @@ def test_pipeline_shares_cache_across_clap_family(monkeypatch, wav_factory):
     result = pipeline.score_audio(path, ["clap", "sound_events"], show_progress=False)
     assert len(counter) == 1  # one forward pass for both models
     assert "clap_000" in result.frames_df and "sound_events_music" in result.frames_df
+
+
+def test_music_emotion_silence_gate(monkeypatch):
+    """music_emotion NaNs digital silence (the speech_emotion precedent).
+    Offline: the probe is package data, only the embedder is stubbed.
+
+    On real weights, silence yields valence -.294 / arousal -.245 —
+    inside the range genuine music produces, so an ungated value is
+    indistinguishable from a real reading downstream."""
+    from aud2psy.models.music_emotion import MusicEmotionModel
+
+    model = MusicEmotionModel(device="cpu")
+    model.coef, model.intercept, model.provenance = __import__(
+        "aud2psy.models.music_emotion", fromlist=["load_probe"]
+    ).load_probe()
+    emb = np.tile(np.eye(1, EMBED_DIM), (3, 1))
+    monkeypatch.setattr(
+        MusicEmotionModel, "embed_windows", lambda self, y, sr, centers: emb
+    )
+    grid = Grid.for_duration(1.5, 0.5)
+
+    out = model.extract(np.zeros(48000, dtype=np.float32), 48000, grid)
+    assert all(np.isnan(v).all() for v in out.values())
+    assert model.info_["n_windows_silence_gated"] == 3
+
+    out = model.extract(sine(220, 1.0, sr=48000), 48000, grid)
+    assert all(np.isfinite(v).all() for v in out.values())
+    assert model.info_["n_windows_silence_gated"] == 0

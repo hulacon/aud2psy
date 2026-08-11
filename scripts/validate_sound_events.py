@@ -176,10 +176,19 @@ def main(argv: list[str]) -> int:
         print(f"{c:>{width}} " + " ".join(f"{scores[s][c]:>9.3f}" for s in scores))
 
     print("\n=== per-target diagnostics (column peak should be the target stimulus) ===")
+    # gated stimuli (silence) score NaN across the bank — drop them rather
+    # than let NaN comparisons decide the ranking
+    gated = [s for s in scores if all(np.isnan(v) for v in scores[s].values())]
+    if gated:
+        print(f"(silence-gated, excluded from ranking: {', '.join(gated)})")
     for stim, cat in TARGETS.items():
         if cat is None:
             continue
-        ranked = sorted(scores, key=lambda s: scores[s][cat], reverse=True)
+        ranked = sorted(
+            (s for s in scores if s not in gated),
+            key=lambda s: scores[s][cat],
+            reverse=True,
+        )
         margin = scores[ranked[0]][cat] - scores[ranked[1]][cat]
         flag = "OK " if ranked[0] == stim or (stim, ranked[0]) in (
             ("siren", "alarm"), ("alarm", "siren")) else "FAIL"

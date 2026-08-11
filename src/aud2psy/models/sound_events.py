@@ -30,8 +30,16 @@ affect prompts (speech_emotion / music_emotion's job).
 the better speech detector — it doubles as a validation cross-check and
 keeps the bank's event vocabulary complete.
 
-No NaN/gating: cosine to a unit vector is defined everywhere, silence
-included. Checkpoint is fixed (not coupled to ``--clap-model``):
+**Silence gate** (added Aug 2026 after per-category validation): windows
+whose 10 s CLAP context window falls below ``SILENCE_DBFS`` are NaN
+across all categories. Cosine to a unit vector is defined everywhere, so
+the original design took no NaNs — but on digital silence the embedding
+collapses toward a fixed degenerate point and the *whole bank* inflates
+(music .294, gunshot_explosion .309 on ``np.zeros``, above what either
+scores on its own target stimulus). That made `music` fail §1 validation
+against a silence "stimulus". The gate is deliberately narrow: CLAP is
+level-invariant for real content, so this is not a quiet-scene
+threshold — see ``clap.SILENCE_DBFS``. Checkpoint is fixed (not coupled to ``--clap-model``):
 per-category validation is checkpoint-specific, the music_emotion
 stance. Categories that fail per-category validation on real stimuli
 should simply be deleted from ``PROMPT_BANK`` — with raw-cosine scoring
@@ -42,7 +50,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from .clap import ClapModel
+from .clap import SILENCE_DBFS, ClapModel, silent_windows
 
 # category -> prompt ensemble. Keys become columns: sound_events_<key>.
 PROMPT_BANK: dict[str, list[str]] = {
@@ -104,10 +112,14 @@ class SoundEventsModel(ClapModel):
     def extract(self, y: np.ndarray, sr: int, grid) -> dict[str, np.ndarray]:
         audio_emb = self.embed_windows(y, sr, grid.centers)
         scores = audio_emb @ self.bank_.T
+        silent = silent_windows(y, sr, grid.centers)
+        scores[silent] = np.nan
         self.info_ = {
             "checkpoint": self.checkpoint,
             "scoring": "cosine vs unit-norm prompt-ensemble embedding "
             "(compare within a column; cross-column is ordinal at best)",
+            "silence_gate_dbfs": SILENCE_DBFS,
+            "n_windows_silence_gated": int(silent.sum()),
             "prompts": PROMPT_BANK,
         }
         return {
