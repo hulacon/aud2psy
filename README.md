@@ -70,26 +70,26 @@ speaker-identity tracking, use the `diarize` model (below).
 
 ## Models
 
-| Model | Level | Features |
-|-------|-------|----------|
-| `loudness` | frame | `loudness_rms`, `loudness_db` |
-| `pitch` | frame | `pitch_f0` (pYIN, NaN when unvoiced), `pitch_voiced_prob` |
-| `spectral` | frame | `spectral_centroid`, `spectral_bandwidth`, `spectral_rolloff`, `spectral_flux`, `spectral_zcr` |
-| `onsets` | frame | `onsets_strength`, `onsets_rate`, `onsets_tempo` |
-| `tonal` | frame | `tonal_key_clarity`, `tonal_majorness`, `tonal_chroma_entropy` (Krumhansl profiles, 3 s windows) |
-| `rhythm` | frame | `rhythm_pulse_clarity`, `rhythm_beat_strength`, `rhythm_novelty` (Foote section novelty) |
-| `timbre` | frame | `timbre_mfcc_01`–`13` (MFCC coefficients 1–13; c0 excluded — that's `loudness_db`'s job), `timbre_contrast_01`–`07` (per-octave spectral peak-valley contrast), `timbre_flatness` (Wiener entropy: ~1 noise, ~0 tones) — the standard encoding-model timbre regressors |
-| `psychoacoustic` | frame | `psychoacoustic_loudness` (sone, ISO 532-1 time-varying Zwicker), `psychoacoustic_sharpness` (acum, DIN 45692; NaN on silence), `psychoacoustic_roughness` (asper, Daniel & Weber), `psychoacoustic_fluctuation` (Fastl-style estimate, see below) via [MoSQITo](https://github.com/Eomys/MoSQITo). Absolute values assume digital RMS 1.0 = 94 dB SPL (files carry no calibration) — relative time courses are the meaningful output. ~3× real time on CPU |
-| `speech` | frame | `speech_prob` (Silero VAD) |
-| `clap` | frame | `clap_000`…`clap_511`: LAION-CLAP audio embeddings in a shared space with word2psy's `clap_text` (10 s windows; `--clap-model` to change checkpoint) |
-| `ebind_audio` | frame | `ebind_audio_0000`…`ebind_audio_1023`: EBind audio-arm embeddings (`encord-team/ebind-full`; ImageBind audio trunk projected into the Perception Encoder space), in one shared 1024-d space with viz2psy `ebind` images and word2psy `ebind_text` text (2 s windows; weights CC-BY-NC-SA 4.0, see below) |
-| `music_emotion` | frame | `music_emotion_valence`, `music_emotion_arousal` in [−1, 1]: DEAM-trained probe on CLAP embeddings. Discriminates affective levels between clips/sections (held-out song-level r = .71/.84); not a beat-to-beat tracker |
-| `sound_events` | frame | `sound_events_speech`, `_music`, `_singing`, `_laughter`, `_crying`, `_shouting`, `_crowd`, `_applause`, `_footsteps`, `_vehicle`, `_water`, `_wind`, `_animals`, `_gunshot_explosion`, `_siren_alarm`, `_thunder`: zero-shot cosine scores of each 10 s window against a text prompt bank in the CLAP space (see below) |
-| `speech_emotion` | frame | `speech_emotion_valence`, `_arousal`, `_dominance` (~0–1): vocal affect from [audeering's wav2vec2 MSP-Podcast model](https://huggingface.co/audeering/wav2vec2-large-robust-12-ft-emotion-msp-dim) in 4 s windows; NaN where the window isn't speech (Silero-gated). Weights are CC-BY-NC-SA (research use) |
-| `egemaps` | frame | the 25 [eGeMAPS](https://audeering.github.io/opensmile/) v02 low-level descriptors via openSMILE: `egemaps_loudness`, spectral balance (`_alpha_ratio`, `_hammarberg`, `_slope_0_500`, `_slope_500_1500`, `_flux`), `_mfcc1`–`4`, and a voiced set (`_f0_semitone`, `_jitter`, `_shimmer`, `_hnr`, `_h1_h2`, `_h1_a3`, formant `_f1/f2/f3_freq/_bw/_amp`) that is NaN off-speech (Silero-gated); needs `pip install "aud2psy[egemaps]"` |
-| `beats` | events | beat/downbeat table (`time`, `is_downbeat`) via [beat_this](https://github.com/CPJKU/beat_this); needs `pip install "aud2psy[beats]"` |
-| `diarize` | events | speaker turn table via [pyannote community-1](https://huggingface.co/pyannote/speaker-diarization-community-1); needs `pip install "aud2psy[diarize]"` + a HuggingFace token (see below) |
-| `transcribe` | segment | time-stamped transcript export (faster-whisper, default `large-v3`; `--whisper-model` to change; `--verbatim` for disfluency-preserving CrisperWhisper mode, see below) |
+| Model | Level | # | Features |
+|-------|-------|---|----------|
+| `loudness` | frame | 2 | `loudness_rms`, `loudness_db` |
+| `pitch` | frame | 2 | `pitch_f0` (pYIN, NaN when unvoiced), `pitch_voiced_prob` |
+| `spectral` | frame | 5 | `spectral_centroid`, `spectral_bandwidth`, `spectral_rolloff`, `spectral_flux`, `spectral_zcr` |
+| `onsets` | frame | 3 | `onsets_strength`, `onsets_rate`, `onsets_tempo` |
+| `tonal` | frame | 3 | `tonal_key_clarity`, `tonal_majorness`, `tonal_chroma_entropy` (Krumhansl profiles, 3 s windows) |
+| `rhythm` | frame | 3 | `rhythm_pulse_clarity`, `rhythm_beat_strength`, `rhythm_novelty` (Foote section novelty) |
+| `timbre` | frame | 21 | `timbre_mfcc_01`–`13` (MFCC coefficients 1–13; c0 excluded — that's `loudness_db`'s job), `timbre_contrast_01`–`07` (per-octave spectral peak-valley contrast), `timbre_flatness` (Wiener entropy: ~1 noise, ~0 tones) — the standard encoding-model timbre regressors |
+| `psychoacoustic` | frame | 4 | `psychoacoustic_loudness` (sone, ISO 532-1 time-varying Zwicker), `psychoacoustic_sharpness` (acum, DIN 45692; NaN on silence), `psychoacoustic_roughness` (asper, Daniel & Weber), `psychoacoustic_fluctuation` (Fastl-style estimate, see below) via [MoSQITo](https://github.com/Eomys/MoSQITo). Absolute values assume digital RMS 1.0 = 94 dB SPL (files carry no calibration) — relative time courses are the meaningful output. ~3× real time on CPU |
+| `speech` | frame | 1 | `speech_prob` (Silero VAD) |
+| `clap` | frame | 512 | `clap_000`…`clap_511`: LAION-CLAP audio embeddings in a shared space with word2psy's `clap_text` (10 s windows; `--clap-model` to change checkpoint) |
+| `ebind_audio` | frame | 1024 | `ebind_audio_0000`…`ebind_audio_1023`: EBind audio-arm embeddings (`encord-team/ebind-full`; ImageBind audio trunk projected into the Perception Encoder space), in one shared 1024-d space with viz2psy `ebind` images and word2psy `ebind_text` text (2 s windows; weights CC-BY-NC-SA 4.0, see below) |
+| `music_emotion` | frame | 2 | `music_emotion_valence`, `music_emotion_arousal` in [−1, 1]: DEAM-trained probe on CLAP embeddings. Discriminates affective levels between clips/sections (held-out song-level r = .71/.84); not a beat-to-beat tracker |
+| `sound_events` | frame | 16 | `sound_events_speech`, `_music`, `_singing`, `_laughter`, `_crying`, `_shouting`, `_crowd`, `_applause`, `_footsteps`, `_vehicle`, `_water`, `_wind`, `_animals`, `_gunshot_explosion`, `_siren_alarm`, `_thunder`: zero-shot cosine scores of each 10 s window against a text prompt bank in the CLAP space (see below) |
+| `speech_emotion` | frame | 3 | `speech_emotion_valence`, `_arousal`, `_dominance` (~0–1): vocal affect from [audeering's wav2vec2 MSP-Podcast model](https://huggingface.co/audeering/wav2vec2-large-robust-12-ft-emotion-msp-dim) in 4 s windows; NaN where the window isn't speech (Silero-gated). Weights are CC-BY-NC-SA (research use) |
+| `egemaps` | frame | 25 | the 25 [eGeMAPS](https://audeering.github.io/opensmile/) v02 low-level descriptors via openSMILE: `egemaps_loudness`, spectral balance (`_alpha_ratio`, `_hammarberg`, `_slope_0_500`, `_slope_500_1500`, `_flux`), `_mfcc1`–`4`, and a voiced set (`_f0_semitone`, `_jitter`, `_shimmer`, `_hnr`, `_h1_h2`, `_h1_a3`, formant `_f1/f2/f3_freq/_bw/_amp`) that is NaN off-speech (Silero-gated); needs `pip install "aud2psy[egemaps]"` |
+| `beats` | events | — | beat/downbeat table (`time`, `is_downbeat`) via [beat_this](https://github.com/CPJKU/beat_this); needs `pip install "aud2psy[beats]"` |
+| `diarize` | events | — | speaker turn table via [pyannote community-1](https://huggingface.co/pyannote/speaker-diarization-community-1); needs `pip install "aud2psy[diarize]"` + a HuggingFace token (see below) |
+| `transcribe` | segment | — | time-stamped transcript export (faster-whisper, default `large-v3`; `--whisper-model` to change; `--verbatim` for disfluency-preserving CrisperWhisper mode, see below) |
 
 ## Speaker diarization
 

@@ -7,7 +7,7 @@ type: software
 title: "aud2psy: psychological and acoustic feature extraction from audio"
 authors:
   - family-names: Hutchinson
-    given-names: Ben
+    given-names: J. Benjamin
     email: bhutch@uoregon.edu
     affiliation: University of Oregon
 repository-code: "https://github.com/hulacon/aud2psy"
