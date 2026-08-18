@@ -21,6 +21,7 @@ MODEL_REGISTRY: dict[str, tuple[str, str, str]] = {
     "psychoacoustic": ("aud2psy.models.psychoacoustic", "PsychoacousticModel", "Zwicker loudness, sharpness, roughness (MoSQITo) + fluctuation estimate"),
     "speech": ("aud2psy.models.speech", "SpeechModel", "Speech presence probability (Silero VAD)"),
     "clap": ("aud2psy.models.clap", "ClapModel", "512-d CLAP audio embeddings (shared space with word2psy clap_text)"),
+    "ebind_audio": ("aud2psy.models.ebind_audio", "EBindAudioModel", "1024-d EBind audio embeddings (ImageBind arm; shared space with viz2psy ebind / word2psy ebind_text)"),
     "music_emotion": ("aud2psy.models.music_emotion", "MusicEmotionModel", "Musical valence/arousal (DEAM-trained probe on CLAP)"),
     "sound_events": ("aud2psy.models.sound_events", "SoundEventsModel", "16 zero-shot scene/event tags (CLAP prompt bank: laughter, music, sirens, ...)"),
     "speech_emotion": ("aud2psy.models.speech_emotion", "SpeechEmotionModel", "Vocal arousal/dominance/valence (wav2vec2 MSP-Podcast; VAD-gated)"),

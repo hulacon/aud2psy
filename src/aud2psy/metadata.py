@@ -20,6 +20,7 @@ def get_model_version(model_name: str) -> str:
         "speech": ("faster-whisper", None),  # bundled Silero VAD
         "transcribe": ("faster-whisper", None),
         "clap": ("transformers", None),
+        "ebind_audio": ("ebind", None),
         "music_emotion": ("transformers", None),
         "sound_events": ("transformers", None),
         "speech_emotion": ("transformers", None),

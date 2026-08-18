@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.0] - 2026-08-17
+
+### Added
+
+- `ebind_audio` model: 1024-d L2-normalized soundtrack embeddings from
+  EBind's ImageBind-huge audio arm projected into the Perception Encoder
+  space (checkpoint `encord-team/ebind-full`, revision-pinned). Shares
+  one cross-modal space with viz2psy `ebind` and word2psy `ebind_text`.
+  2 s context window per grid point (ImageBind's native clip length);
+  columns are fixed-width 4-digit (`ebind_audio_0000..1023`). Scope is
+  naturalistic soundtracks — the AudioSet-trained encoder carries no
+  lexical signal for isolated spoken words (2026-08-17 mmmdata pilot).
+
+### Fixed
+
+- Sidecar embedding `pattern` now reflects the actual index width
+  (`ebind_audio_{NNNN}`) instead of hard-coding `{NNN}`.
+
 ## [0.12.0] - 2026-08-10
 
 ### Added

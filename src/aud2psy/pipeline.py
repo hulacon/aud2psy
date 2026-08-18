@@ -140,8 +140,9 @@ def score_audio(
                 columns[feat] = values
             names = list(features)
             if _is_embedding(name, names):  # record the pattern, not 512 names
+                index_width = len(names[0]) - len(name) - 1  # digits after "{name}_"
                 model_meta[name] = {
-                    "pattern": f"{name}_{{NNN}}",
+                    "pattern": f"{name}_{{{'N' * index_width}}}",
                     "range": [0, len(names) - 1],
                     "count": len(names),
                     "runtime_sec": round(time.time() - t_model, 2),
