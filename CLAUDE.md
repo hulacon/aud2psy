@@ -7,7 +7,7 @@ aud2psy extracts numerical psychological and acoustic features from **audio**
 [viz2psy](../viz2psy) (images/video frames) and [word2psy](../word2psy)
 (text). The audience is psychology / cognitive-neuroscience researchers
 working with naturalistic stimuli (film clips, spoken narratives). Outputs
-feed [psyquilt](../psyquilt) for relational matrices; see psyquilt's
+feed [psytwill](../psytwill) for relational matrices; see psytwill's
 CLAUDE.md "Long-term ambition" section for the movie-input plan that
 motivated this package and the target stimulus set (~60 3–6-min clips, many
 dialogue-free).
@@ -21,7 +21,7 @@ module.
 
 - **Frame-level** models produce a row-per-timepoint CSV with a `time`
   column (viz2psy video-mode analog; configurable hop). This is what
-  psyquilt consumes directly — its spaces auto-detect with zero changes.
+  psytwill consumes directly — its spaces auto-detect with zero changes.
 - **Segment-level** transcription produces a `text`/`onset`/`offset` CSV
   that pipes into `word2psy --text-column text` (passthrough columns carry
   timing into word2psy's chunks output). Transcription is an *export*, not
@@ -32,7 +32,7 @@ module.
 aud2psy owns acoustic/paralinguistic features + transcription export.
 word2psy owns everything about the words themselves. CLAP (v0.2) will share
 an audio–text embedding space the way viz2psy's `clip` and word2psy's
-`clip_text` share OpenCLIP ViT-B-32 — psyquilt pairs such spaces via its
+`clip_text` share OpenCLIP ViT-B-32 — psytwill pairs such spaces via its
 `COMPATIBLE_SPACES` registry.
 
 ## Architecture (`src/aud2psy/`)
@@ -53,9 +53,9 @@ an audio–text embedding space the way viz2psy's `clip` and word2psy's
   (arrays of length `grid.n_windows`); the segment model implements
   `transcribe(y_16k, sr)`. `load()` is lazy; `unload()` frees weights.
   **Feature keys are model-prefixed** (`loudness_rms`, `spectral_centroid`)
-  — the word2psy chunk-model convention; psyquilt's `PROFILE_REGISTRY`
+  — the word2psy chunk-model convention; psytwill's `PROFILE_REGISTRY`
   pattern-matches these (entries `loudness`/`pitch`/`spectral`/`onsets` +
-  combined `acoustic` were added to psyquilt in Aug 2026 — coordinate any
+  combined `acoustic` were added to psytwill in Aug 2026 — coordinate any
   renaming with that registry).
 - **`models/`** — frame level: `loudness` (rms, db — dB of window-mean RMS),
   `pitch` (pyin f0 in 65–2093 Hz, voiced_prob; f0 NaN when unvoiced),
@@ -98,7 +98,7 @@ an audio–text embedding space the way viz2psy's `clip` and word2psy's
   returns ModelOutput objects, the 512-d projection is `pooler_output`.
   **Shared space with word2psy's `clap_text`** (same checkpoint) — do not
   change checkpoint/normalization/naming without coordinating word2psy
-  and psyquilt's `COMPATIBLE_SPACES`), `music_emotion` (DEAM-trained
+  and psytwill's `COMPATIBLE_SPACES`), `music_emotion` (DEAM-trained
   ridge probe applied to CLAP embeddings → `music_emotion_valence` /
   `music_emotion_arousal` in [-1, 1]; the fitted probe ships as package
   data `data/music_emotion_probe.{npz,json}` — ~4 KB coefficient matrix
@@ -112,7 +112,7 @@ an audio–text embedding space the way viz2psy's `clip` and word2psy's
   `sound_events` — on digital silence the probe returns valence −.294 /
   arousal −.245, inside the range real music produces and therefore
   undetectable downstream, the `speech_emotion` gating precedent;
-  `clap` itself stays ungated so psyquilt gets a complete matrix),
+  `clap` itself stays ungated so psytwill gets a complete matrix),
   `sound_events`
   (16 zero-shot event tags — speech/music/singing/laughter/crying/
   shouting/crowd/applause/footsteps/vehicle/water/wind/animals/
@@ -216,7 +216,7 @@ an audio–text embedding space the way viz2psy's `clip` and word2psy's
   language) -> ScoreResult(frames_df, transcript_df, words_df, meta)`;
   models load/extract/unload one at a time. `save_result` writes the
   family file set for `-o scores.csv`: `scores_frames.csv` (time +
-  features flat — the psyquilt-ready file), `scores_transcript.csv`
+  features flat — the psytwill-ready file), `scores_transcript.csv`
   (raw Whisper segments: segment_idx/text/onset/offset/asr_confidence/
   no_speech_prob — pipes into `word2psy --text-column text`),
   `scores_transcript_words.csv` (word-level timestamps),
@@ -305,9 +305,9 @@ numbers. Commit/push only when asked.
      0 transcript rows, `n_speech_segments: 0`, max speech_prob .047;
      onsets_rate 1.95/s vs 2.0 ground truth, median tempo 117.5 vs 120
      BPM, loudness tracks the synthesized crescendo (r = .99).
-   - *(c) psyquilt*: `psyquilt spaces dialogue_frames.csv` detects 5
+   - *(c) psytwill*: `psytwill spaces dialogue_frames.csv` detects 5
      profile spaces (loudness/pitch/spectral/onsets + 13-d acoustic).
-     This needed a PROFILE_REGISTRY addition in psyquilt (committed
+     This needed a PROFILE_REGISTRY addition in psytwill (committed
      there), matched by aud2psy's model-prefixed column naming — the
      original "zero changes" claim held for row identity (`time`), not
      space detection.
@@ -339,12 +339,12 @@ numbers. Commit/push only when asked.
      repetition flagged, IRTs on the clip timeline (mean 1.94 s) with the
      intrusion correctly not advancing IRT; sidecar speech timing:
      7 pauses ≥ .5 s, speech rate .65 wps.
-   - *psyquilt*: detects 7 profile spaces on the 20-column frames CSV
-     (per-model + 19-d acoustic; registry extended in psyquilt,
+   - *psytwill*: detects 7 profile spaces on the 20-column frames CSV
+     (per-model + 19-d acoustic; registry extended in psytwill,
      committed there).
 3. **v0.2 — torch tier** (done Aug 2026): `clap` frame embeddings +
    `beats` event table; torch/transformers now core deps (word2psy gained
-   `clap_text`, psyquilt's COMPATIBLE_SPACES gained the clap pairs — both
+   `clap_text`, psytwill's COMPATIBLE_SPACES gained the clap pairs — both
    committed in their repos). The DEAM valence/arousal probe was
    deliberately held back for its own design checkpoint (dataset download
    + training/validation protocol). Validation (Aug 2026):
@@ -356,7 +356,7 @@ numbers. Commit/push only when asked.
      "rain falling" .286 (.128).
    - *beats*: 120-BPM wordless clip → 41 beats, inter-beat interval
      .500 ± .000 s, median tempo 120.0 BPM exactly.
-   - *psyquilt cross mode end-to-end*: `psyquilt matrices
+   - *psytwill cross mode end-to-end*: `psytwill matrices
      clap_frames.csv captions_chunks.csv` emits a 30×3
      `clap__x__clap_text__cosine` matrix.
 
@@ -389,7 +389,7 @@ in a forced aligner themselves.
    word2psy norms recipe), 45-s excerpts only, 2 s training stride,
    ship fitted coefficients as package data, name `music_emotion_*`
    (Ben's call over `affect_*`; `emotion_*` would collide with
-   word2psy's GoEmotions profile in psyquilt), separate psyquilt profile
+   word2psy's GoEmotions profile in psytwill), separate psytwill profile
    NOT folded into the 19-d acoustic. Trained on 26,198 windows from
    1,746 songs (~20 min embed on MPS, cached at
    `~/.cache/aud2psy/deam/`). **Song-level 5-fold GroupKFold CV: pooled
@@ -435,8 +435,8 @@ in a forced aligner themselves.
    (categorical would duplicate word2psy's GoEmotions) and over training
    our own probe (MSP-Podcast needs a data agreement, unlike DEAM);
    native ~0–1 scale kept; dominance included; no per-segment transcript
-   summary; psyquilt gained a separate 3-d `speech_emotion` profile (no
-   collision — psyquilt matches `speech_prob` exactly, there is no
+   summary; psytwill gained a separate 3-d `speech_emotion` profile (no
+   collision — psytwill matches `speech_prob` exactly, there is no
    `speech_*` pattern), NOT folded into `acoustic` (the music_emotion
    precedent); family-wide naming revisit deferred until models settle.
    Tests: 62 offline (+4: windowing + VAD gating, which run offline since
@@ -453,9 +453,9 @@ in a forced aligner themselves.
    - *per-speaker affect*: frames grouped by diarized turns give
      per-speaker VAD means on the dialogue clip (the diarize+affect
      combo recipe, now in README).
-   - *psyquilt*: combined frames CSV detects `speech_emotion` as its own
+   - *psytwill*: combined frames CSV detects `speech_emotion` as its own
      3-d profile; `acoustic` stays 5-d (registry change committed in
-     psyquilt, 53 tests pass).
+     psytwill, 53 tests pass).
    - *runtime*: 4.4 s for the 14 s clip on MPS (~3× real time).
 
 7. **v0.6 — egemaps** (done Aug 2026): the interpretable-prosody
@@ -463,7 +463,7 @@ in a forced aligner themselves.
    Checkpoint decisions (Ben, Aug 2026): eGeMAPS before verbatim mode;
    LLD level + `Grid.average` only, never openSMILE functionals (Grid
    is our windowing layer); VAD-gate the voiced set, general set
-   ungated; sanitized `egemaps_*` naming; own 25-d psyquilt profile
+   ungated; sanitized `egemaps_*` naming; own 25-d psytwill profile
    (not folded into `acoustic`); `opensmile` in both the `[egemaps]`
    extra and dev deps (offline + weightless, unlike the other extras).
    Also fixed pyproject `version` drift (was stuck at 0.3.1 while
@@ -487,8 +487,8 @@ in a forced aligner themselves.
    - *gating*: 20 s 120-BPM melody+percussion clip (max speech_prob
      .15) → all 15 voiced columns NaN in all 40 windows, all 10
      general columns finite.
-   - *psyquilt*: `egemaps` detected as its own 25-d profile,
-     `acoustic` stays 5-d (registry change in psyquilt, 53 tests
+   - *psytwill*: `egemaps` detected as its own 25-d profile,
+     `acoustic` stays 5-d (registry change in psytwill, 53 tests
      pass).
    - *runtime*: 1.4 s for a 5 s clip on CPU including openSMILE+VAD
      init — negligible next to the torch models.
@@ -556,7 +556,7 @@ in a forced aligner themselves.
    7-band per-octave spectral contrast, spectral flatness. Frontend
    constants match `spectral.py` so native frames align;
    `egemaps_mfcc1–4` coexist by design (different mel frontend — the
-   loudness_rms/egemaps_loudness precedent). 21 columns, own psyquilt
+   loudness_rms/egemaps_loudness precedent). 21 columns, own psytwill
    profile. Tests: 86 offline (+7). Validation (Aug 2026, synthetic,
    Linux container):
    - *flatness*: white noise .563 vs the closed-form periodogram

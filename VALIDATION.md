@@ -100,7 +100,7 @@ reading is indistinguishable downstream (the `speech_emotion` VAD-gate
 precedent). `clap` itself is **not** gated: its embedding is a valid
 unit vector, silence is a real acoustic state for an embedding space
 to represent, and NaN rows would punch holes in the 512-d matrix
-psyquilt consumes (whose NaN handling is unverified — psyquilt is not
+psytwill consumes (whose NaN handling is unverified — psytwill is not
 checked out on this machine).
 
 Narrowness confirmed on real audio: the toy clip, whose quietest
@@ -254,17 +254,17 @@ the usual clips:
 - [ ] runtime on M-series: expect ≲3× real time (was ~3× on the Linux
   container CPU).
 
-## 5. psyquilt registry + detection
+## 5. psytwill registry + detection
 
-- [ ] add three standalone profiles in psyquilt's PROFILE_REGISTRY
+- [ ] add three standalone profiles in psytwill's PROFILE_REGISTRY
   (mirroring the egemaps/speech_emotion entries; NOT folded into
   `acoustic`, which stays 5-d):
   - `timbre` — columns matching `timbre_*` (21-d)
   - `psychoacoustic` — columns matching `psychoacoustic_*` (4-d)
   - `sound_events` — columns matching `sound_events_*` (16-d; adjust
     if categories were dropped in §2)
-- [ ] `psyquilt spaces <combined_frames.csv>` detects the three new
-  profiles; existing profiles unchanged; psyquilt tests pass.
+- [ ] `psytwill spaces <combined_frames.csv>` detects the three new
+  profiles; existing profiles unchanged; psytwill tests pass.
 
 ## 6. Close out
 

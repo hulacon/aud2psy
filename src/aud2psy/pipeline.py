@@ -16,7 +16,7 @@ from .metadata import build_sidecar, get_model_version
 
 @dataclass
 class ScoreResult:
-    frames_df: pd.DataFrame | None  # time + features; the psyquilt-ready table
+    frames_df: pd.DataFrame | None  # time + features; the psytwill-ready table
     transcript_df: pd.DataFrame | None  # raw Whisper segments, for word2psy
     words_df: pd.DataFrame | None  # word-level timestamps
     recall_df: pd.DataFrame | None = None  # wordpool-annotated recall

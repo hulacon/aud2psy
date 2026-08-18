@@ -1,0 +1,24 @@
+cff-version: 1.2.0
+message: >-
+  If you use this software, please cite it using the metadata below,
+  and cite the work behind the specific models you used (see the
+  "Citing" section of README.md).
+type: software
+title: "aud2psy: psychological and acoustic feature extraction from audio"
+authors:
+  - family-names: Hutchinson
+    given-names: Ben
+    email: bhutch@uoregon.edu
+    affiliation: University of Oregon
+repository-code: "https://github.com/hulacon/aud2psy"
+license: MIT
+version: 0.13.1
+date-released: 2026-08-18
+keywords:
+  - audio features
+  - psychoacoustics
+  - prosody
+  - speech
+  - music
+  - psychology
+  - neuroscience

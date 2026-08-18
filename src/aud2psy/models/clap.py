@@ -4,7 +4,7 @@
 `laion/larger_clap_music_and_speech`, matching the film-clip domain of
 music + dialogue + sound design). The paired text encoder lives in
 word2psy as `clap_text` (same checkpoint), the way viz2psy's `clip` pairs
-with word2psy's `clip_text`; psyquilt's COMPATIBLE_SPACES declares the
+with word2psy's `clip_text`; psytwill's COMPATIBLE_SPACES declares the
 pairing. Do not change the checkpoint, the L2 normalization, or the
 `clap_{i:03d}` naming without coordinating all three repos.
 
@@ -37,7 +37,7 @@ EMBED_DIM = 512
 # -70 dBFS; this fires on muted tracks, digital black at export
 # head/tail, and gaps in edited audio. Consumed by `sound_events` and
 # `music_emotion`; `clap` itself stays ungated so its 512-d matrix has no
-# holes for psyquilt (silence is a real acoustic state to embed).
+# holes for psytwill (silence is a real acoustic state to embed).
 SILENCE_DBFS = -80.0
 
 

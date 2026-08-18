@@ -33,7 +33,7 @@ def test_column_mapping_sanity():
     assert len(set(cleans)) == 25
     for clean in cleans:
         assert clean.startswith("egemaps_")
-        # CSV/psyquilt-friendly: no '-', '.', or capitals survive the rename
+        # CSV/psytwill-friendly: no '-', '.', or capitals survive the rename
         assert clean.replace("_", "").isalnum() and clean == clean.lower()
     assert set(VOICED_RAW) == {n for n in RAW_TO_CLEAN if n.endswith("_sma3nz")}
     assert len(VOICED_RAW) == 15

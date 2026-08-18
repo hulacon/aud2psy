@@ -4,12 +4,15 @@ Extract psychological and acoustic features from audio — including the audio
 stream of video stimuli — for psychology and cognitive-neuroscience research.
 Sibling of [word2psy](https://github.com/hulacon/word2psy) (text) and
 [viz2psy](https://github.com/hulacon/viz2psy) (images/video); outputs feed
-[psyquilt](https://github.com/hulacon/psyquilt) for relational matrices.
+[psytwill](https://github.com/hulacon/psytwill) for relational matrices.
 
 ## Install
 
+Not yet on PyPI — install from GitHub or a clone:
+
 ```bash
-pip install -e .
+pip install "aud2psy @ git+https://github.com/hulacon/aud2psy"
+# or: git clone https://github.com/hulacon/aud2psy && cd aud2psy && pip install -e .
 ```
 
 Requires Python 3.10–3.12 and the `ffmpeg` binary on PATH (for video input
@@ -33,12 +36,19 @@ aud2psy --list-models
 
 | File | Contents |
 |------|----------|
-| `scores_frames.csv` | one row per 0.5 s window (`time` = window center) with all frame-level features flat — psyquilt-ready |
+| `scores_frames.csv` | one row per 0.5 s window (`time` = window center) with all frame-level features flat — psytwill-ready |
 | `scores_transcript.csv` | one row per Whisper segment: `text`, `onset`, `offset`, `asr_confidence`, `no_speech_prob` — plus `median_f0` and coarse `voice_gender` (M/F, 150 Hz f0 boundary) when the `pitch` model also runs |
 | `scores_transcript_words.csv` | word-level timestamps |
 | `scores_beats.csv` | beat/downbeat events (with the `beats` model) |
 | `scores_speakers.csv` | speaker turns (with the `diarize` model): `turn_idx`, `speaker`, `onset`, `offset` |
 | `scores.meta.json` | provenance sidecar |
+
+Every table's first column is `stimulus_id` (the input file's stem by
+default; `--stimulus-id` overrides it) — the join key shared with viz2psy
+and word2psy outputs. The `.meta.json` sidecar carries `schema_version`,
+`extractor`, and, per model, the package version and exact `checkpoint`
+identifier (`null` for analytic models), so every CSV is traceable to the
+weights that produced it.
 
 A wordless clip produces a zero-row transcript and `n_speech_segments: 0`
 in the sidecar — an explicit result, not an error.
@@ -72,6 +82,7 @@ speaker-identity tracking, use the `diarize` model (below).
 | `psychoacoustic` | frame | `psychoacoustic_loudness` (sone, ISO 532-1 time-varying Zwicker), `psychoacoustic_sharpness` (acum, DIN 45692; NaN on silence), `psychoacoustic_roughness` (asper, Daniel & Weber), `psychoacoustic_fluctuation` (Fastl-style estimate, see below) via [MoSQITo](https://github.com/Eomys/MoSQITo). Absolute values assume digital RMS 1.0 = 94 dB SPL (files carry no calibration) — relative time courses are the meaningful output. ~3× real time on CPU |
 | `speech` | frame | `speech_prob` (Silero VAD) |
 | `clap` | frame | `clap_000`…`clap_511`: LAION-CLAP audio embeddings in a shared space with word2psy's `clap_text` (10 s windows; `--clap-model` to change checkpoint) |
+| `ebind_audio` | frame | `ebind_audio_0000`…`ebind_audio_1023`: EBind audio-arm embeddings (`encord-team/ebind-full`; ImageBind audio trunk projected into the Perception Encoder space), in one shared 1024-d space with viz2psy `ebind` images and word2psy `ebind_text` text (2 s windows; weights CC-BY-NC-SA 4.0, see below) |
 | `music_emotion` | frame | `music_emotion_valence`, `music_emotion_arousal` in [−1, 1]: DEAM-trained probe on CLAP embeddings. Discriminates affective levels between clips/sections (held-out song-level r = .71/.84); not a beat-to-beat tracker |
 | `sound_events` | frame | `sound_events_speech`, `_music`, `_singing`, `_laughter`, `_crying`, `_shouting`, `_crowd`, `_applause`, `_footsteps`, `_vehicle`, `_water`, `_wind`, `_animals`, `_gunshot_explosion`, `_siren_alarm`, `_thunder`: zero-shot cosine scores of each 10 s window against a text prompt bank in the CLAP space (see below) |
 | `speech_emotion` | frame | `speech_emotion_valence`, `_arousal`, `_dominance` (~0–1): vocal affect from [audeering's wav2vec2 MSP-Podcast model](https://huggingface.co/audeering/wav2vec2-large-robust-12-ft-emotion-msp-dim) in 4 s windows; NaN where the window isn't speech (Silero-gated). Weights are CC-BY-NC-SA (research use) |
@@ -226,18 +237,32 @@ word2psy --all scores_transcript.csv --text-column text -o words.csv
 The transcript's `onset`/`offset` columns pass through into word2psy's
 chunks output, so every text feature stays on the clip's timeline.
 
-## Cross-modal audio–text comparison
+## Cross-modal comparison
 
-`clap` audio embeddings share a space with word2psy's `clap_text`
-(same LAION-CLAP checkpoint), so soundtrack windows can be compared
-directly to captions or transcript chunks — and psyquilt pairs the two
+aud2psy participates in two shared embedding spaces, each guaranteed by an
+identical checkpoint on both sides:
+
+| Space | aud2psy model | Partner | Dims |
+|-------|---------------|---------|------|
+| CLAP (audio ↔ text) | `clap` | word2psy `clap_text` | 512 |
+| EBind (audio ↔ image ↔ text) | `ebind_audio` | viz2psy `ebind`, word2psy `ebind_text` | 1024 |
+
+Soundtrack windows can therefore be compared directly to captions,
+transcript chunks, or movie frames — and psytwill pairs matching spaces
 automatically in cross mode:
 
 ```bash
 aud2psy clap clip.mp4 -o audio.csv
 word2psy clap_text captions.csv --text-column caption -o text.csv
-psyquilt matrices audio_frames.csv text_chunks.csv -o out/
+psytwill matrices audio_frames.csv text_chunks.csv -o out/
 ```
+
+One EBind caveat from our pilots: for isolated spoken words, the audio arm
+hears generic speech rather than word identity — spoken-word stimuli should
+enter the EBind space through word2psy `ebind_text` (their transcriptions);
+`ebind_audio` is for soundtracks, music, and environmental sound. The EBind
+weights are CC-BY-NC-SA 4.0 (non-commercial), and the `ebind` package
+installs from GitHub via `pip install "aud2psy[ebind]"`.
 
 ## Sound-event tags (sound_events)
 
@@ -313,6 +338,46 @@ counts and speech-timing metrics (latency to first word, speech rate,
 pause statistics). Mind the word-timestamp caveat above: onsets are
 fMRI/behavior-grade, not EEG-grade.
 
+## Related packages
+
+aud2psy is the auditory member of a family of stimulus feature extractors
+that share one output convention (per-model column prefixes, `stimulus_id`
+keys, provenance sidecars):
+
+| Package | Modality |
+|---------|----------|
+| [viz2psy](https://github.com/hulacon/viz2psy) | Images and video frames |
+| [aud2psy](https://github.com/hulacon/aud2psy) | Audio and speech (this package) |
+| [word2psy](https://github.com/hulacon/word2psy) | Words and text |
+| [psytwill](https://github.com/hulacon/psytwill) | Downstream consumer: combines and compares features across the three extractors |
+
+## Citing
+
+To cite aud2psy itself, see [CITATION.cff](CITATION.cff) (GitHub's "Cite this
+repository" button renders it).
+
+If you use aud2psy in your research, please also cite the work behind the
+models you used:
+
+- **librosa** (the DSP backbone of `loudness`, `spectral`, `onsets`, `timbre`, `rhythm`, `tonal`): McFee, B., et al. (2015). librosa: Audio and music signal analysis in Python. *SciPy 2015*. [doi:10.25080/Majora-7b98e3ed-003](https://doi.org/10.25080/Majora-7b98e3ed-003)
+- **pYIN** (`pitch`): Mauch, M., & Dixon, S. (2014). pYIN: A fundamental frequency estimator using probabilistic threshold distributions. *ICASSP 2014*. [doi:10.1109/ICASSP.2014.6853678](https://doi.org/10.1109/ICASSP.2014.6853678)
+- **Key profiles** (`tonal`): Krumhansl, C. L., & Kessler, E. J. (1982). Tracing the dynamic changes in perceived tonal organization in a spatial representation of musical keys. *Psychological Review, 89*(4), 334–368. [doi:10.1037/0033-295X.89.4.334](https://doi.org/10.1037/0033-295X.89.4.334)
+- **Section novelty** (`rhythm`): Foote, J. (2000). Automatic audio segmentation using a measure of audio novelty. *ICME 2000*. [doi:10.1109/ICME.2000.869637](https://doi.org/10.1109/ICME.2000.869637). The tonal/rhythm/timbre regressor set follows the naturalistic music-fMRI canon of Alluri, V., et al. (2012). Large-scale brain networks emerge from dynamic processing of musical timbre, key and rhythm. *NeuroImage, 59*(4), 3677–3689. [doi:10.1016/j.neuroimage.2011.11.019](https://doi.org/10.1016/j.neuroimage.2011.11.019)
+- **Psychoacoustics** (`psychoacoustic`): computed with [MoSQITo](https://github.com/Eomys/MoSQITo). Loudness: ISO 532-1:2017 (Zwicker). Sharpness: DIN 45692:2009. Roughness: Daniel, P., & Weber, R. (1997). Psychoacoustical roughness: Implementation of an optimized model. *Acta Acustica, 83*(1), 113–123. Fluctuation-strength estimate follows Fastl, H., & Zwicker, E. (2007). *Psychoacoustics: Facts and models* (3rd ed.). Springer.
+- **Silero VAD** (`speech`, and the speech gating in `speech_emotion`/`egemaps`): Silero Team (2021). Silero VAD: Pre-trained enterprise-grade voice activity detector (software). [github.com/snakers4/silero-vad](https://github.com/snakers4/silero-vad)
+- **LAION-CLAP** (`clap`, `sound_events`, and the embedding basis of `music_emotion`): Wu, Y., Chen, K., Zhang, T., Hui, Y., Berg-Kirkpatrick, T., & Dubnov, S. (2023). Large-scale contrastive language-audio pretraining with feature fusion and keyword-to-caption augmentation. *ICASSP 2023*. [arXiv:2211.06687](https://arxiv.org/abs/2211.06687)
+- **EBind** (`ebind_audio`): Broadbent, J., Cohen, F., Hvilshøj, F., Landau, E., & Sasoglu, E. (2025). EBind: A practical approach to space binding. [arXiv:2511.14229](https://arxiv.org/abs/2511.14229). Its audio trunk comes from ImageBind: Girdhar, R., et al. (2023). ImageBind: One embedding space to bind them all. *CVPR 2023*. [arXiv:2305.05665](https://arxiv.org/abs/2305.05665)
+- **DEAM** (the training data of `music_emotion`'s probe): Aljanaki, A., Yang, Y.-H., & Soleymani, M. (2017). Developing a benchmark for emotional analysis of music. *PLoS ONE, 12*(3), e0173392. [doi:10.1371/journal.pone.0173392](https://doi.org/10.1371/journal.pone.0173392)
+- **Vocal affect model** (`speech_emotion`): Wagner, J., et al. (2023). Dawn of the transformer era in speech emotion recognition: Closing the valence gap. *IEEE TPAMI, 45*(9), 10745–10759. [arXiv:2203.07378](https://arxiv.org/abs/2203.07378)
+- **eGeMAPS / openSMILE** (`egemaps`): Eyben, F., et al. (2016). The Geneva minimalistic acoustic parameter set (GeMAPS) for voice research and affective computing. *IEEE Transactions on Affective Computing, 7*(2), 190–202. [doi:10.1109/TAFFC.2015.2457417](https://doi.org/10.1109/TAFFC.2015.2457417); Eyben, F., Wöllmer, M., & Schuller, B. (2010). openSMILE: The Munich versatile and fast open-source audio feature extractor. *ACM Multimedia 2010*. [doi:10.1145/1873951.1874246](https://doi.org/10.1145/1873951.1874246)
+- **Beat This!** (`beats`): Foscarin, F., Schlüter, J., & Widmer, G. (2024). Beat this! Accurate beat tracking without DBN postprocessing. *ISMIR 2024*. [arXiv:2407.21658](https://arxiv.org/abs/2407.21658)
+- **pyannote** (`diarize`): Plaquet, A., & Bredin, H. (2023). Powerset multi-class cross entropy loss for neural speaker diarization. *Interspeech 2023*. [doi:10.21437/Interspeech.2023-205](https://doi.org/10.21437/Interspeech.2023-205); Bredin, H. (2023). pyannote.audio 2.1 speaker diarization pipeline: Principle, benchmark, and recipe. *Interspeech 2023*. [doi:10.21437/Interspeech.2023-105](https://doi.org/10.21437/Interspeech.2023-105)
+- **Whisper** (`transcribe`, and the `speech` VAD ships inside faster-whisper): Radford, A., et al. (2023). Robust speech recognition via large-scale weak supervision. *ICML 2023*. [arXiv:2212.04356](https://arxiv.org/abs/2212.04356); run through [faster-whisper](https://github.com/SYSTRAN/faster-whisper) (software)
+- **CrisperWhisper** (`transcribe --verbatim`): Zusag, M., Wagner, L., & Thallinger, B. (2024). CrisperWhisper: Accurate timestamps on verbatim speech transcriptions. *Interspeech 2024*. [doi:10.21437/Interspeech.2024-731](https://doi.org/10.21437/Interspeech.2024-731)
+
 ## License
 
-MIT
+MIT License. See [LICENSE](LICENSE) for details. Some optional model weights
+carry their own licenses, documented in their sections above (openSMILE:
+audEERING research license; `speech_emotion` and CrisperWhisper weights:
+CC-BY-NC; EBind weights: CC-BY-NC-SA 4.0; pyannote community-1: CC-BY-4.0).

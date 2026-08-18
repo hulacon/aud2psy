@@ -37,7 +37,7 @@ def test_silent_windows_tracks_the_context_window():
 def test_bank_shape_and_hygiene():
     assert len(PROMPT_BANK) == 16
     for cat, prompts in PROMPT_BANK.items():
-        assert re.fullmatch(r"[a-z][a-z_]*", cat)  # CSV/psyquilt-safe keys
+        assert re.fullmatch(r"[a-z][a-z_]*", cat)  # CSV/psytwill-safe keys
         assert len(prompts) >= 2
     assert "laughter" in PROMPT_BANK and "music" in PROMPT_BANK
     # the recorded negative finding: no speaker-attribute prompts

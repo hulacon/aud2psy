@@ -6,7 +6,7 @@ Subclasses set class attributes ``name`` and ``level``:
   where every array has length ``grid.n_windows``. Compute at librosa's native
   resolution, then reduce with ``grid.average`` / ``grid.rate``. Feature keys
   are model-prefixed (``loudness_rms``, ``spectral_centroid``) — the word2psy
-  chunk-model convention, which psyquilt's profile registry pattern-matches.
+  chunk-model convention, which psytwill's profile registry pattern-matches.
 - ``level = "segment"`` — implement ``transcribe(y, sr) -> (segments_df, words_df, info)``
   on 16 kHz audio.
 

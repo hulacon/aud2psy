@@ -14,7 +14,7 @@ softmax would couple every column to the bank's composition (pruning one
 category after validation would silently change all others), would force
 co-occurring events to compete (dialogue over score music is the norm in
 film), and CLAP's trained logit scale makes it near-one-hot, destroying
-the graded time course psyquilt correlates. The cost, documented here
+the graded time course psytwill correlates. The cost, documented here
 and in the sidecar: per-column baselines differ (some prompts sit closer
 to everything), so values compare *within a column* over time and
 between clips; cross-column comparison is ordinal at best. Prompt

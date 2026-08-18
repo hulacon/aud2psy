@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.1] - 2026-08-18
+
+Housekeeping release for public use — documentation, packaging metadata, and
+citations; no feature-output changes.
+
+### Added
+
+- `ebind` optional-dependency extra (the GitHub-only `ebind` package was
+  previously undeclared).
+- README row and cross-modal documentation for `ebind_audio` (absent from
+  the README since its 0.13.0 release); the cross-modal section now covers
+  both shared spaces (CLAP and EBind).
+- README documentation of the `stimulus_id` column and the Contract-B
+  sidecar fields (`schema_version`, per-model `checkpoint`).
+- `CITATION.cff` for citing aud2psy itself.
+- README "Related packages" section (viz2psy, word2psy, psytwill) and a
+  "Citing" section with full references for every model.
+- Install instructions for the `git+` form (the package is not on PyPI).
+
+### Fixed
+
+- `psyquilt` renamed to `psytwill` everywhere (README examples, source
+  comments, VALIDATION.md, CLAUDE.md) — the downstream package was renamed
+  and its CLI command is `psytwill`, so the old `psyquilt matrices …`
+  example no longer resolved.
+- License section now links the LICENSE file and summarizes the
+  third-party weight licenses in one place.
+
 ## [0.13.0] - 2026-08-17
 
 ### Added
