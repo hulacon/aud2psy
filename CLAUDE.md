@@ -548,6 +548,23 @@ in a forced aligner themselves.
      doesn't help), doubled when the degenerate retry fires. Budget
      minutes per clip. Trailing junk segments carry asr_confidence
      .33–.39 vs .90 for real speech — the documented filter handle.
+   - *FIELD FINDING (Aug 2026, MMMData ses-29 free recall) — **open
+     defect, the validation above did not catch it***: on real long-form
+     speech the CT2 verbatim path **silently drops whole ~30 s chunks**.
+     Three subjects, ~70–110 min each: **7 / 33 / 9** chunk-sized gaps,
+     versus **0–2** through the standard `large-v3` path on the same
+     audio. Nothing in the output marks the loss — no gap flag, no low
+     `asr_confidence`, no error. This is data loss rather than a quality
+     compromise, and it outranks the two documented CT2 compromises in
+     severity. Every validation bullet above used short synthetic `say`
+     clips, where it does not reproduce; that gap between synthetic
+     validation and long-form field use is the lesson worth carrying to
+     the next model. Workaround in use: run both arms and diff the gaps —
+     each arm reliably detects the other's dropouts. Cause not isolated
+     (candidates: the `vad_filter` disablement, CT2 chunk-boundary
+     handling, the no-space tokenizer's token volume vs segment length).
+     Warned in `transcribe.py` and the README; consumer-side record in
+     mmmdata-agents `docs/archive/workbench/ses29-final-recall/log.md`.
 
 9. **v0.8.0 — timbre** (done Aug 2026; first of the endgame trio from
    the Aug 2026 survey: CANLab scoping review, Giordano et al. 2023

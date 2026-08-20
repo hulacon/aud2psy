@@ -15,6 +15,27 @@ so timestamp accuracy is stock-faster-whisper grade (within the README's
 existing caveat), and CrisperWhisper 2.0 (multilingual, better F1) has no
 faster-whisper path yet — it's the documented upgrade path once its
 Mac/transformers-5 story stabilizes.
+
+.. warning::
+
+   **KNOWN DEFECT (open, filed 2026-08-20): the CT2 verbatim path drops
+   whole ~30 s chunks silently on long recordings.** This is data loss,
+   not a quality compromise like the two above, and nothing in the output
+   marks it — the words table is simply missing that span, with no gap
+   flag, no low ``asr_confidence``, and no error.
+
+   Reproduced on 3/3 subjects of real free-recall speech (~70-110 min
+   each): **7 / 33 / 9** chunk-sized gaps, against **0-2** for the same
+   audio through the standard ``large-v3`` path. The standard arm detects
+   the verbatim arm's gaps and vice versa, so a cross-arm gap diff is the
+   available workaround until this is fixed. Not reproduced on short
+   synthetic clips, which is why the v0.7 validation missed it.
+
+   Until fixed, do not use ``verbatim=True`` as the sole transcript source
+   for anything longer than a few minutes where completeness matters.
+   Cause not yet isolated (candidates: the ``vad_filter`` disablement on
+   this path, CT2 chunk-boundary handling, or the no-space tokenizer's
+   token volume interacting with segment length).
 """
 
 from __future__ import annotations

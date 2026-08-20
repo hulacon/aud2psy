@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Known issues
+
+- **`transcribe --verbatim` silently drops ~30 s chunks on long
+  recordings** (open, reported 2026-08-20). The CTranslate2 CrisperWhisper
+  path loses whole chunk-sized spans with no gap flag, no low
+  `asr_confidence`, and no error — the words table is simply missing them.
+  Measured on 3 subjects of real free-recall audio (~70–110 min each):
+  7 / 33 / 9 gaps, versus 0–2 for the same audio through the default
+  `large-v3` path. Does not reproduce on short clips, which is why the
+  v0.7 validation missed it. Workaround: run both arms and diff their
+  gaps. Documented in `transcribe.py`, the README, and roadmap entry 8.
+
 ## [0.13.1] - 2026-08-18
 
 Housekeeping release for public use — documentation, packaging metadata, and

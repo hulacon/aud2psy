@@ -213,6 +213,21 @@ penalty is never applied by default because it can suppress genuine
 distant repeats, which recall research needs. The sidecar's
 `degenerate_retry` field records whether the fallback fired.
 
+> [!WARNING]
+> **Known defect, open as of 2026-08-20 — silent chunk dropout on long
+> recordings.** The CTranslate2 verbatim path can drop whole ~30 s chunks
+> of speech with no marker of any kind: the words table is simply missing
+> the span, with no gap flag, no low `asr_confidence`, and no error.
+> Measured on 3/3 subjects of real free-recall audio (~70–110 min each):
+> **7 / 33 / 9** chunk-sized gaps, versus **0–2** for the same audio
+> through the default `large-v3` path. Short clips are unaffected, which
+> is why the v0.7 validation did not catch it.
+>
+> Until this is fixed, do not use `--verbatim` as your only transcript for
+> long-form audio where completeness matters. Running both arms and
+> diffing their gaps works as a stopgap — each arm reliably detects the
+> other's dropouts.
+
 Limits to know about: **English and German only** (the model's training
 languages); roughly 10–15× slower than the default model on CPU (budget
 minutes per clip, not seconds); word timestamps through the CTranslate2
