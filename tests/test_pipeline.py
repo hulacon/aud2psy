@@ -3,6 +3,7 @@
 import json
 import subprocess
 import sys
+from unittest import mock
 
 import numpy as np
 import pandas as pd
@@ -11,6 +12,7 @@ import pytest
 from aud2psy.audio import input_type, load_audio
 from aud2psy.cli import MODEL_REGISTRY, main
 from aud2psy.exceptions import InputError
+from aud2psy import pipeline
 from aud2psy.pipeline import save_result, score_audio
 
 from conftest import SR, sine
@@ -128,6 +130,52 @@ def test_registry_modules_all_exist():
     for name, (module_path, class_name, _) in MODEL_REGISTRY.items():
         cls = getattr(importlib.import_module(module_path), class_name)
         assert cls.name == name
+
+
+def test_window_sec_declared_where_context_exceeds_the_hop():
+    """Contract B 4.1: a time-resolved row must state how much it saw.
+
+    Models using the `window >> hop` pattern score a long context window
+    centered on each grid midpoint, so adjacent rows overlap heavily. That
+    is invisible to a consumer unless the sidecar says so.
+    """
+    import importlib
+
+    expected = {
+        "clap": 10.0,
+        "sound_events": 10.0,  # inherits ClapModel's window
+        "music_emotion": 10.0,  # same
+        "ebind_audio": 2.0,
+        "speech_emotion": 4.0,
+    }
+    for name, (module_path, class_name, _) in MODEL_REGISTRY.items():
+        cls = getattr(importlib.import_module(module_path), class_name)
+        assert getattr(cls, "window_sec", None) == expected.get(name), (
+            f"{name}: window_sec is {getattr(cls, 'window_sec', None)}, "
+            f"expected {expected.get(name)}. A model whose every column shares "
+            f"one context window must declare it; one whose rows see only "
+            f"their own hop window must leave it None."
+        )
+
+
+def test_window_sec_reaches_the_sidecar(wav_factory, tmp_path):
+    """The declared window has to survive into the written metadata."""
+    from aud2psy.models.base import BaseModel
+
+    class FakeWindowed(BaseModel):
+        name = "loudness"  # ride an existing registry slot
+        level = "frame"
+        window_sec = 7.5
+
+        def extract(self, y, sr, grid):
+            return {"loudness_rms": np.zeros(grid.n_windows)}
+
+    path = wav_factory(sine(440, 2.0))
+    with mock.patch.object(pipeline, "get_model", return_value=FakeWindowed()):
+        result = score_audio(path, models=["loudness"], hop=0.5)
+    assert result.meta["models"]["loudness"]["window_sec"] == 7.5
+    assert result.meta["frames"]["hop_sec"] == 0.5
+    assert result.meta["frames"]["time"] == "window center"
 
 
 def test_music_emotion_probe_ships_and_loads():

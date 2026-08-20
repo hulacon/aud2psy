@@ -154,6 +154,9 @@ def score_audio(
                 }
             model_meta[name]["package_version"] = get_model_version(name)
             model_meta[name]["checkpoint"] = getattr(model, "checkpoint", None)
+            window_sec = getattr(model, "window_sec", None)
+            if window_sec is not None:
+                model_meta[name]["window_sec"] = float(window_sec)
             info = getattr(model, "info_", None)
             if info:
                 model_meta[name].update(info)  # an info_ checkpoint is authoritative

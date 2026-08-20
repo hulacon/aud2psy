@@ -55,6 +55,7 @@ class EBindAudioModel(BaseModel):
     name = "ebind_audio"
     level = "frame"
     input_sr = 16000  # ImageBind's audio sample rate
+    window_sec = WINDOW_SEC
 
     def __init__(self, checkpoint: str = DEFAULT_CHECKPOINT, device: str | None = None):
         self.checkpoint = checkpoint

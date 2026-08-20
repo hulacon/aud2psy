@@ -33,6 +33,16 @@ class BaseModel:
     name: str = "base"
     level: str = "frame"  # "frame", "segment", or "events"
     input_sr: int | None = None  # frame models: decode rate override (e.g. CLAP's 48 kHz)
+    # Seconds of audio each grid row actually saw, when that differs from the
+    # grid window itself. Models using the `window >> hop` pattern (a long
+    # context window centered on each grid midpoint) set this; None means the
+    # row saw only its own [k*hop, (k+1)*hop) window. Recorded per model in
+    # the sidecar so a consumer can tell how much smoothing is baked in --
+    # Contract B 4.1 requires time-resolved tables to state their semantics.
+    # Set it only when EVERY column of the model shares one context window;
+    # a window used by a single feature (psychoacoustic's modulation-spectrum
+    # window, say) is a per-feature detail and does not belong here.
+    window_sec: float | None = None
     # Contract B §4.1: exact architecture+weights identifier for any model
     # with learned parameters (e.g. "laion/larger_clap_music_and_speech");
     # None for analytic/DSP models. Recorded per model in the sidecar.

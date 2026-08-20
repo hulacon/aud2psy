@@ -72,6 +72,7 @@ class ClapModel(BaseModel):
     name = "clap"
     level = "frame"
     input_sr = 48000
+    window_sec = WINDOW_SEC
 
     def __init__(self, checkpoint: str = DEFAULT_CHECKPOINT, device: str | None = None):
         self.checkpoint = checkpoint

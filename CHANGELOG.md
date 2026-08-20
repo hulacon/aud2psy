@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.2] - 2026-08-20
+
+### Added
+
+- **`window_sec` in the sidecar** for models using the `window >> hop`
+  pattern (Contract B §4.1). A frame model that scores a long context
+  window centered on each grid midpoint produces rows that overlap
+  heavily, and nothing in the written metadata said so: `frames` already
+  recorded `hop_sec` and `time: window center`, but not how much audio each
+  row actually saw. `BaseModel.window_sec` now declares it and the pipeline
+  writes it to `models.<name>.window_sec`. Declared by `clap` (10 s),
+  `sound_events` and `music_emotion` (10 s, inherited from `ClapModel`),
+  `speech_emotion` (4 s), `ebind_audio` (2 s); left `None` by the twelve
+  models whose rows see only their own `[k·hop, (k+1)·hop)` window.
+
+  Set it only when *every* column of a model shares one context window. A
+  window belonging to a single feature — `psychoacoustic`'s
+  modulation-spectrum window, for instance — stays a per-feature detail and
+  is deliberately not declared here.
+
+  Why it matters: a consumer reading a frames CSV could not tell how much
+  temporal smoothing was baked into it, which silently inflates apparent
+  sample size and breaks naive permutation nulls on time-resolved features.
+
 ## [Unreleased]
 
 ### Known issues
