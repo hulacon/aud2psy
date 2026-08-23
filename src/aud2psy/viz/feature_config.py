@@ -196,7 +196,7 @@ FEATURE_CONFIGS: dict[str, FeatureConfig] = {
         level="segment",
         timeseries=True,
         timeseries_mode="all",
-        column_patterns=["asr_confidence", "no_speech_prob"],
+        column_patterns=["transcribe_asr_confidence", "transcribe_no_speech_prob"],
     ),
 }
 

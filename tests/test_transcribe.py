@@ -42,7 +42,7 @@ def test_transcribe_synthesized_speech(tmp_path):
     segments_df, words_df, info = model.transcribe(y, sr)
 
     assert len(segments_df) >= 1
-    text = " ".join(segments_df["text"]).lower()
+    text = " ".join(segments_df["transcribe_text"]).lower()
     for word in ("quick", "brown", "fox", "lazy", "dog"):
         assert word in text
     assert (segments_df["offset"] > segments_df["onset"]).all()
@@ -61,7 +61,8 @@ def test_transcribe_silence_is_zero_rows(tmp_path):
     assert result.meta["transcription"]["n_speech_segments"] == 0
     written = save_result(result, tmp_path / "scores.csv")
     assert written["transcript"].read_text().strip() == (
-        "segment_idx,text,onset,offset,asr_confidence,no_speech_prob"
+        "chunk_idx,onset,offset,transcribe_text,"
+        "transcribe_asr_confidence,transcribe_no_speech_prob"
     )
 
 

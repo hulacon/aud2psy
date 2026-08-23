@@ -53,12 +53,12 @@ def _make_frames_df(n=40, with_embeddings=True, rng_seed=0):
 def _make_transcript_df(n=6, rng_seed=0):
     rng = np.random.RandomState(rng_seed)
     return pd.DataFrame({
-        "segment_idx": np.arange(n),
-        "text": [f"Sentence number {i}." for i in range(n)],
+        "chunk_idx": np.arange(n),
+        "transcribe_text": [f"Sentence number {i}." for i in range(n)],
         "onset": np.arange(n) * 3.0,
         "offset": np.arange(n) * 3.0 + 2.5,
-        "asr_confidence": rng.uniform(0.5, 1, n),
-        "no_speech_prob": rng.uniform(0, 0.2, n),
+        "transcribe_asr_confidence": rng.uniform(0.5, 1, n),
+        "transcribe_no_speech_prob": rng.uniform(0, 0.2, n),
         "speaker": ["SPEAKER_00", "SPEAKER_01"] * (n // 2),
     })
 

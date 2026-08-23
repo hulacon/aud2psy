@@ -46,7 +46,7 @@ def test_beats_on_click_track(wav_factory):
     assert abs(info["tempo_bpm_median"] - 120.0) < 3
     ibis = np.diff(beats_df["time"])
     assert np.abs(ibis - 0.5).max() < 0.06
-    assert set(beats_df.columns) == {"time", "is_downbeat"}
+    assert set(beats_df.columns) == {"time", "beats_is_downbeat"}
 
 
 def test_music_emotion_on_music_vs_silence():

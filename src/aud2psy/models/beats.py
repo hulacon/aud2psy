@@ -15,7 +15,9 @@ import pandas as pd
 
 from .base import BaseModel
 
-BEAT_COLUMNS = ["time", "is_downbeat"]
+# §4.1: every feature column carries its model's prefix, so a consumer
+# can attribute it. `time` is a reserved coordinate and stays bare.
+BEAT_COLUMNS = ["time", "beats_is_downbeat"]
 DOWNBEAT_TOLERANCE_SEC = 0.03
 
 
@@ -45,7 +47,8 @@ class BeatsModel(BaseModel):
             if len(beats) and len(downbeats)
             else np.zeros(len(beats), dtype=bool)
         )
-        df = pd.DataFrame({"time": beats, "is_downbeat": is_downbeat}, columns=BEAT_COLUMNS)
+        df = pd.DataFrame({"time": beats, "beats_is_downbeat": is_downbeat},
+                          columns=BEAT_COLUMNS)
         ibis = np.diff(beats)
         info = {
             "n_beats": int(len(beats)),

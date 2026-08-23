@@ -47,8 +47,25 @@ import pandas as pd
 
 from .base import BaseModel
 
-SEGMENT_COLUMNS = ["segment_idx", "text", "onset", "offset", "asr_confidence", "no_speech_prob"]
-WORD_COLUMNS = ["segment_idx", "word", "onset", "offset", "probability"]
+# §4.1 column convention. Two kinds of column here and the split matters:
+#
+#   reserved   chunk_idx / word_idx / word / onset / offset -- structural
+#              position and the stimulus's own coordinates. Bare by design;
+#              consumers key on them.
+#   features   everything the model *measured*, prefixed with the model name
+#              so it can be attributed. Unprefixed feature columns are
+#              invisible to a consumer's resolver, which silently drops them
+#              onto a null model and then collides them across models.
+#
+# `chunk_idx` rather than `segment_idx`: a transcript segment is a chunk, the
+# same grouping level word2psy emits for text, and one structural vocabulary
+# across extractors means a consumer needs one key rather than one per
+# extractor.
+SEGMENT_COLUMNS = ["chunk_idx", "onset", "offset",
+                   "transcribe_text", "transcribe_asr_confidence",
+                   "transcribe_no_speech_prob"]
+WORD_COLUMNS = ["chunk_idx", "word_idx", "word", "onset", "offset",
+                "transcribe_probability"]
 
 DEFAULT_WHISPER_MODEL = "large-v3"
 COMPUTE_TYPE = "int8"  # CTranslate2 on CPU; int8 is the fast path
@@ -182,20 +199,25 @@ class TranscribeModel(BaseModel):
                 continue
             i = len(seg_rows)
             seg_rows.append({
-                "segment_idx": i,
-                "text": text,
+                "chunk_idx": i,
                 "onset": seg.start,
                 "offset": seg.end,
-                "asr_confidence": float(np.exp(seg.avg_logprob)),
-                "no_speech_prob": seg.no_speech_prob,
+                "transcribe_text": text,
+                "transcribe_asr_confidence": float(np.exp(seg.avg_logprob)),
+                "transcribe_no_speech_prob": seg.no_speech_prob,
             })
-            for word, w in words:
+            # word_idx is the word's position within its segment. Whisper can
+            # give two words identical start/end, so onset/offset alone do not
+            # identify a word row -- 158 duplicate keys turned up in the
+            # MMMData movie transcripts on exactly that.
+            for j, (word, w) in enumerate(words):
                 word_rows.append({
-                    "segment_idx": i,
+                    "chunk_idx": i,
+                    "word_idx": j,
                     "word": word,
                     "onset": w.start,
                     "offset": w.end,
-                    "probability": w.probability,
+                    "transcribe_probability": w.probability,
                 })
         segments_df = pd.DataFrame(seg_rows, columns=SEGMENT_COLUMNS)
         words_df = pd.DataFrame(word_rows, columns=WORD_COLUMNS)

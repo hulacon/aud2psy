@@ -42,7 +42,8 @@ PLOTLY_CDN = "https://cdn.plot.ly/plotly-2.27.0.min.js"
 
 # Structural columns that are never features
 _FRAME_INDEX_COLS = ["time"]
-_SEGMENT_INDEX_COLS = ["segment_idx", "text", "onset", "offset"]
+_SEGMENT_INDEX_COLS = ["chunk_idx", "word_idx", "transcribe_text",
+                       "onset", "offset"]
 
 # Detail-panel labels per frame model (order = dropdown order)
 _PANEL_LABELS = {
@@ -277,7 +278,8 @@ def _detail_panels(frame_cols: list[str], segment_cols: list[str]) -> dict:
             {"id": name, "label": label, "kind": kind, "features": cols}
         )
 
-    conf = [c for c in ("asr_confidence", "no_speech_prob") if c in segment_cols]
+    conf = [c for c in ("transcribe_asr_confidence",
+                        "transcribe_no_speech_prob") if c in segment_cols]
     if conf:
         panels["segment"].append(
             {"id": "confidence", "label": "Whisper confidence", "kind": "bars_prob",
@@ -386,7 +388,7 @@ def create_dashboard(
             if c not in _SEGMENT_INDEX_COLS and c not in segment_feature_cols
         ]
         payload["segments"] = {
-            "text": _values(transcript_df["text"]),
+            "text": _values(transcript_df["transcribe_text"]),
             "onset": _values(transcript_df["onset"]),
             "offset": _values(transcript_df["offset"]),
             "features": {c: _values(transcript_df[c]) for c in segment_feature_cols},

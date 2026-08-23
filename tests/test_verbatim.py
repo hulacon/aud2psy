@@ -65,11 +65,12 @@ def test_cli_verbatim_argument_validation(capsys):
 
 def test_recall_skips_filler_words():
     words = pd.DataFrame({
-        "segment_idx": [0] * 4,
+        "chunk_idx": [0] * 4,
+        "word_idx": [0, 1, 2, 3],
         "word": ["apple", "[UM]", "banana", "[UH]"],
         "onset": [1.0, 2.0, 3.0, 4.0],
         "offset": [1.4, 2.2, 3.4, 4.2],
-        "probability": [0.9] * 4,
+        "transcribe_probability": [0.9] * 4,
         "is_filler": [False, True, False, True],
     })
     recall = annotate_recall(words, ["apple", "banana", "cherry"])
@@ -124,7 +125,7 @@ def test_degenerate_decode_triggers_penalized_retry():
     assert model.model.calls[0]["vad_filter"] is False
     assert model.model.calls[1]["repetition_penalty"] == 1.1
     assert list(words_df["word"]) == ["So", "[UM]", "I", "I", "think"]
-    assert segments_df["text"].iloc[0] == "So [UM] I I think"
+    assert segments_df["transcribe_text"].iloc[0] == "So [UM] I I think"
     assert info["degenerate_retry"] is True and info["repetition_penalty"] == 1.1
     assert info["n_fillers"] == 1
 
@@ -143,7 +144,7 @@ def test_all_separator_segment_is_dropped():
     model = TranscribeModel(verbatim=True)
     model.model = JunkTailWhisper()
     segments_df, words_df, info = model.transcribe(np.zeros(16000, dtype=np.float32), 16000)
-    assert len(segments_df) == 1 and segments_df["text"].iloc[0] == "Apple"
+    assert len(segments_df) == 1 and segments_df["transcribe_text"].iloc[0] == "Apple"
     assert info["n_speech_segments"] == 1
     assert list(words_df["word"]) == ["Apple"]
 
@@ -180,7 +181,7 @@ def test_verbatim_end_to_end(tmp_path):
         check=True, capture_output=True,
     )
     res = score_audio(wav, ["transcribe"], verbatim=True)
-    text = " ".join(res.transcript_df["text"])
+    text = " ".join(res.transcript_df["transcribe_text"])
     assert "[UM]" in text and "[UH]" in text
     assert "I I" in text  # the repetition survives
     assert "," not in " ".join(res.words_df["word"])  # separator artifact stripped
