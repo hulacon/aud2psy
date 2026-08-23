@@ -5,6 +5,58 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.14.0] - 2026-08-22
+
+### Added
+
+- **Model-major batch scoring** — `pipeline.score_audio_batch(paths, models)`
+  and multi-input support in the CLI. `score_audio` loads and unloads every
+  model per file, which is right when the file is long: the weights amortise
+  over minutes of audio. It is pathological when the files are short. Measured
+  on 0.54 s spoken words, the nine neural models each cost **44–65 s per file**
+  and essentially all of it is the load — scoring 1,000 words that way is
+  ~159 GPU-hours to analyse nine minutes of audio.
+
+  `score_audio_batch` inverts the loops so each model is loaded once and run
+  across every file. Peak memory stays one model at a time, the invariant
+  `BaseModel.unload` exists to protect; what grows instead is the accumulated
+  feature table, bounded by (n_files × n_frames × n_features).
+
+  Measured speedup on three 0.54 s words, against per-file scoring:
+  **12.5× for the clap family**, 9.2× for `speech`+`speech_emotion`, 1.2× for
+  `transcribe`. The ratio grows with batch size, since the saved load is a
+  constant divided over more files.
+
+  Per-file results are **bit-identical** to `score_audio` — verified with
+  `max_abs_diff = 0` on `clap`/`music_emotion`/`sound_events`,
+  `speech`/`speech_emotion`, and `transcribe` — with one deliberate exception:
+  the CLAP window-embedding cache is not shared across the clap-family models
+  in batch mode. Holding one cache per file alive across three model passes to
+  save forward passes on audio already in memory is worth it per-file and
+  pointless against a load cost amortised a thousandfold. Output values are
+  unaffected.
+
+  Batching is best for many short files. Each file is decoded once per model
+  rather than once per batch (bounded memory beats a decode cache here), so for
+  movie-length audio the repeated decode can outweigh the saved loads — keep
+  using `score_audio` per file there.
+
+- **`--inputs-from CSV`** — a batch manifest with a `path` column plus optional
+  `stimulus_id` and `output`. `--stimulus-id` applies one value to every row,
+  so a manifest is the only way to batch inputs whose `stimulus_id` differs —
+  which is the normal case when one file is one stimulus.
+
+### Changed
+
+- The CLI splits `MODEL... INPUT...` by registry membership rather than by
+  position (leading tokens naming a model are models, the rest are files).
+  Positional splitting cannot express more than one input. Single-input
+  invocations are unaffected.
+- Batched runs record `models.<name>.batched: true` in the sidecar. Their
+  `runtime_sec` is extraction only, with the load amortised across the batch,
+  so it is **not** comparable to an unbatched `runtime_sec` — the flag is what
+  makes that legible rather than a mysterious 50× drop.
+
 ## [0.13.2] - 2026-08-20
 
 ### Added

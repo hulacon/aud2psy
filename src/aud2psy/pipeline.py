@@ -259,6 +259,239 @@ def score_audio(
     )
 
 
+def score_audio_batch(
+    paths: list[str | Path],
+    models: list[str],
+    hop: float = 0.5,
+    whisper_model: str = "large-v3",
+    language: str | None = None,
+    wordpool: str | Path | None = None,
+    clap_model: str | None = None,
+    num_speakers: int | None = None,
+    verbatim: bool = False,
+    show_progress: bool = True,
+) -> list[ScoreResult]:
+    """Run the named models over many files, loading each model ONCE.
+
+    ``score_audio`` loads and unloads every model per file, which is right when
+    the file is long: the weights are amortised over minutes of audio. It is
+    pathological when the files are short. Measured on 0.54 s spoken words, the
+    nine neural models each cost 44-65 s per file and essentially all of it is
+    the load -- scoring 1,000 words that way is ~159 GPU-hours to analyse nine
+    minutes of audio.
+
+    This function inverts the loops: **model-major**, so each model is loaded
+    once and run across every file before being unloaded. Peak memory stays one
+    model at a time, which is the invariant ``BaseModel.unload`` exists to
+    protect; what grows instead is the accumulated feature table, bounded by
+    (n_files x n_frames x n_features) and trivial for short files.
+
+    Per-file results are identical to calling ``score_audio`` on each file, with
+    one deliberate exception: the CLAP window-embedding cache is not shared
+    across the clap-family models. Sharing it would mean holding one cache per
+    file alive across three model passes, and it saves forward passes on audio
+    already in memory -- worth it per-file, pointless against a load cost
+    amortised a thousandfold. Output values are unaffected.
+
+    Best suited to many short files. Each file is decoded once per model rather
+    than once per batch (bounded memory beats a decode cache here), so for long
+    inputs the repeated decode can outweigh the saved loads -- use
+    ``score_audio`` per file for movie-length audio.
+    """
+    from tqdm import tqdm
+
+    paths = [Path(p) for p in paths]
+    if not paths:
+        return []
+    from .cli import MODEL_REGISTRY
+
+    unknown = [m for m in models if m not in MODEL_REGISTRY]
+    if unknown:
+        raise KeyError(f"Unknown model(s): {unknown}; see --list-models")
+
+    frame_names = [m for m in models if m not in ("transcribe", "beats", "diarize")]
+    do_transcribe = "transcribe" in models
+    do_beats = "beats" in models
+    do_diarize = "diarize" in models
+
+    n = len(paths)
+    t0 = [time.time()] * n
+    in_type = [input_type(p) for p in paths]
+    duration: list[float | None] = [None] * n
+    grids: list[Grid | None] = [None] * n
+    columns: list[dict] = [{} for _ in range(n)]
+    model_meta: list[dict] = [{} for _ in range(n)]
+    transcribe_info: list[dict] = [{} for _ in range(n)]
+    beats_info: list[dict] = [{} for _ in range(n)]
+    diarize_info: list[dict] = [{} for _ in range(n)]
+    beats_df: list = [None] * n
+    speakers_df: list = [None] * n
+    exclusive_df: list = [None] * n
+    transcript_df: list = [None] * n
+    words_df: list = [None] * n
+    recall_df: list = [None] * n
+
+    def _durations(sr: int) -> None:
+        """Fill duration/grid on first need, from a decode at ``sr``."""
+        for i, p in enumerate(paths):
+            if duration[i] is None:
+                duration[i] = len(load_audio(p, sr)) / sr
+
+    if frame_names or do_beats:
+        _durations(FEATURE_SR)
+    if frame_names:
+        for i in range(n):
+            grids[i] = Grid.for_duration(duration[i], hop)
+            columns[i] = {"time": grids[i].centers}
+
+    def _record(i: int, name: str, model, feats: dict | None, t_model: float) -> None:
+        if feats is not None:
+            names = list(feats)
+            if _is_embedding(name, names):
+                index_width = len(names[0]) - len(name) - 1
+                model_meta[i][name] = {
+                    "pattern": f"{name}_{{{'N' * index_width}}}",
+                    "range": [0, len(names) - 1],
+                    "count": len(names),
+                    "runtime_sec": round(time.time() - t_model, 2),
+                }
+            else:
+                model_meta[i][name] = {
+                    "columns": names,
+                    "runtime_sec": round(time.time() - t_model, 2),
+                }
+        model_meta[i][name]["package_version"] = get_model_version(name)
+        model_meta[i][name]["checkpoint"] = getattr(model, "checkpoint", None)
+        window_sec = getattr(model, "window_sec", None)
+        if window_sec is not None:
+            model_meta[i][name]["window_sec"] = float(window_sec)
+        info = getattr(model, "info_", None)
+        if info:
+            model_meta[i][name].update(info)
+        # The load is amortised across the batch, so a per-file runtime_sec
+        # here is extraction only and is NOT comparable to score_audio's.
+        model_meta[i][name]["batched"] = True
+
+    for name in tqdm(frame_names, desc="models", disable=not show_progress):
+        kwargs = {"checkpoint": clap_model} if name == "clap" and clap_model else {}
+        model = get_model(name, **kwargs)
+        model.load()
+        model_sr = model.input_sr or FEATURE_SR
+        try:
+            for i, p in enumerate(tqdm(paths, desc=name, leave=False,
+                                       disable=not show_progress)):
+                if hasattr(model, "embed_windows"):
+                    model.cache_ = {}  # per-file; see docstring
+                t_model = time.time()
+                feats = model.extract(load_audio(p, model_sr), model_sr, grids[i])
+                for feat, values in feats.items():
+                    columns[i][feat] = values
+                _record(i, name, model, feats, t_model)
+        finally:
+            model.unload()
+
+    if do_beats:
+        model = get_model("beats")
+        model.load()
+        try:
+            for i, p in enumerate(tqdm(paths, desc="beats", leave=False,
+                                       disable=not show_progress)):
+                t_model = time.time()
+                beats_df[i], beats_info[i] = model.detect(
+                    load_audio(p, FEATURE_SR), FEATURE_SR)
+                model_meta[i]["beats"] = {
+                    "columns": list(beats_df[i].columns),
+                    "runtime_sec": round(time.time() - t_model, 2),
+                }
+                _record(i, "beats", model, None, t_model)
+        finally:
+            model.unload()
+
+    if do_diarize:
+        _durations(WHISPER_SR)
+        model = get_model("diarize", num_speakers=num_speakers)
+        model.load()
+        try:
+            for i, p in enumerate(tqdm(paths, desc="diarize", leave=False,
+                                       disable=not show_progress)):
+                t_model = time.time()
+                speakers_df[i], exclusive_df[i], diarize_info[i] = model.diarize(
+                    load_audio(p, WHISPER_SR), WHISPER_SR)
+                model_meta[i]["diarize"] = {
+                    "columns": list(speakers_df[i].columns),
+                    "runtime_sec": round(time.time() - t_model, 2),
+                }
+                _record(i, "diarize", model, None, t_model)
+        finally:
+            model.unload()
+
+    if do_transcribe:
+        _durations(WHISPER_SR)
+        model = get_model("transcribe", whisper_model=whisper_model,
+                          language=language, verbatim=verbatim)
+        whisper_model = model.whisper_model
+        model.load()
+        try:
+            from .recall import annotate_recall, load_wordpool, recall_summary, speech_timing
+
+            pool = load_wordpool(wordpool) if wordpool is not None else None
+            for i, p in enumerate(tqdm(paths, desc="transcribe", leave=False,
+                                       disable=not show_progress)):
+                t_model = time.time()
+                transcript_df[i], words_df[i], transcribe_info[i] = model.transcribe(
+                    load_audio(p, WHISPER_SR), WHISPER_SR)
+                model_meta[i]["transcribe"] = {
+                    "columns": list(transcript_df[i].columns),
+                    "runtime_sec": round(time.time() - t_model, 2),
+                }
+                _record(i, "transcribe", model, None, t_model)
+                model_meta[i]["transcribe"]["checkpoint"] = whisper_model
+                transcribe_info[i]["speech_timing"] = speech_timing(words_df[i], duration[i])
+                if pool is not None:
+                    recall_df[i] = annotate_recall(words_df[i], pool)
+                    transcribe_info[i]["recall"] = {
+                        "wordpool": str(wordpool), **recall_summary(recall_df[i], pool)}
+        finally:
+            model.unload()
+
+    # Cross-model per-file post-processing, identical to score_audio's tail.
+    results = []
+    for i, p in enumerate(paths):
+        frames = pd.DataFrame(columns[i]) if frame_names else None
+        if (transcript_df[i] is not None and len(transcript_df[i])
+                and frames is not None and "pitch" in frame_names):
+            annotate_voice_gender(transcript_df[i], frames, hop)
+            transcribe_info[i]["voice_gender_threshold_hz"] = VOICE_GENDER_F0_HZ
+        if transcript_df[i] is not None and exclusive_df[i] is not None:
+            from .models.diarize import merge_speakers
+
+            merge_speakers(transcript_df[i], words_df[i], exclusive_df[i])
+            model_meta[i]["transcribe"]["columns"] = list(transcript_df[i].columns)
+        meta = build_sidecar(
+            input_path=p,
+            input_type=in_type[i],
+            duration=duration[i],
+            hop=hop if frame_names else None,
+            n_frames=grids[i].n_windows if grids[i] else None,
+            model_meta=model_meta[i],
+            whisper_model=whisper_model if do_transcribe else None,
+            transcribe_info=transcribe_info[i],
+            beats_info=beats_info[i],
+            diarize_info=diarize_info[i],
+            total_runtime_sec=round(time.time() - t0[i], 2),
+        )
+        results.append(ScoreResult(
+            frames_df=frames,
+            transcript_df=transcript_df[i],
+            words_df=words_df[i],
+            recall_df=recall_df[i],
+            beats_df=beats_df[i],
+            speakers_df=speakers_df[i],
+            meta=meta,
+        ))
+    return results
+
+
 def save_result(
     result: ScoreResult,
     out_path: str | Path,

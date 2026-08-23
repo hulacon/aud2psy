@@ -49,7 +49,9 @@ def build_parser() -> argparse.ArgumentParser:
         "inputs",
         nargs="*",
         metavar="MODEL... INPUT",
-        help="model names followed by one audio/video file (with --all: just the file)",
+        help="model names followed by one or more audio/video files (with --all: "
+             "just the files). Several files load each model ONCE and run it "
+             "across all of them -- see --inputs-from for per-file stimulus ids",
     )
     parser.add_argument("-o", "--output", metavar="PATH",
                         help="output stem, e.g. scores.csv -> scores_frames.csv, "
@@ -80,6 +82,11 @@ def build_parser() -> argparse.ArgumentParser:
                         help="wordpool file (one item per line) for free-recall "
                              "annotation; requires the transcribe model and adds "
                              "a _recall.csv output")
+    parser.add_argument("--inputs-from", metavar="CSV", default=None,
+                        help="batch manifest: a CSV with a `path` column and "
+                             "optional `stimulus_id` and `output` columns. The "
+                             "way to batch when stimulus_id differs per file "
+                             "(--stimulus-id applies one value to every row)")
     parser.add_argument("--list-models", action="store_true", help="list registered models and exit")
     parser.add_argument("--version", action="version", version=_version())
     return parser
@@ -249,10 +256,39 @@ def main(argv: list[str] | None = None) -> int:
         list_models()
         return 0
 
-    if not args.inputs:
-        parser.error("missing input file (and model names, unless --all)")
-    input_path = args.inputs[-1]
-    models = args.inputs[:-1]
+    # Split MODEL... INPUT... by registry membership rather than by position:
+    # leading tokens that name a model are models, everything after is a file.
+    # Positional splitting cannot express more than one input.
+    batch_rows: list[dict] | None = None
+    if args.inputs_from:
+        import csv as _csv
+
+        with open(args.inputs_from, newline="") as f:
+            batch_rows = list(_csv.DictReader(f))
+        if not batch_rows:
+            parser.error(f"--inputs-from {args.inputs_from} has no rows")
+        if "path" not in batch_rows[0]:
+            parser.error(f"--inputs-from {args.inputs_from} needs a `path` column "
+                         f"(got: {', '.join(batch_rows[0])})")
+        input_paths = [r["path"] for r in batch_rows]
+        models = list(args.inputs)
+        stray = [m for m in models if m not in MODEL_REGISTRY]
+        if stray:
+            parser.error(f"with --inputs-from, positionals are model names only; "
+                         f"got {', '.join(stray)}")
+    else:
+        if not args.inputs:
+            parser.error("missing input file (and model names, unless --all)")
+        n_models = 0
+        while n_models < len(args.inputs) and args.inputs[n_models] in MODEL_REGISTRY:
+            n_models += 1
+        models = list(args.inputs[:n_models])
+        input_paths = list(args.inputs[n_models:])
+        if not input_paths:
+            # every token was a model name -- the old parse treated the last as
+            # the input file, so keep that reading rather than erroring.
+            input_paths = [models.pop()]
+    input_path = input_paths[0]
     if args.all:
         if models:
             parser.error("--all replaces explicit model names; give just the input file")
@@ -295,7 +331,46 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--num-speakers requires the diarize model")
 
     from .exceptions import Aud2PsyError
-    from .pipeline import save_result, score_audio
+    from .pipeline import save_result, score_audio, score_audio_batch
+
+    if len(input_paths) > 1:
+        from pathlib import Path
+
+        if not args.output:
+            parser.error("batching several inputs needs -o DIR (stdout takes one table)")
+        out_dir = Path(args.output)
+        if out_dir.suffix:
+            parser.error(f"-o must be a DIRECTORY when batching, got {args.output!r}")
+        out_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            results = score_audio_batch(
+                input_paths,
+                models,
+                hop=args.hop,
+                whisper_model=args.whisper_model,
+                language=args.language,
+                wordpool=args.wordpool,
+                clap_model=args.clap_model,
+                num_speakers=args.num_speakers,
+                verbatim=args.verbatim,
+            )
+        except Aud2PsyError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        for i, (res, src_path) in enumerate(zip(results, input_paths)):
+            row = batch_rows[i] if batch_rows else {}
+            stem = row.get("output") or f"{Path(src_path).stem}.csv"
+            # `output` may nest (one subdirectory per condition is normal), but
+            # it is a path from a file, so it must not escape the output dir.
+            if Path(stem).is_absolute() or ".." in Path(stem).parts:
+                parser.error(f"--inputs-from row {i}: `output` must be a relative "
+                             f"path inside -o, got {stem!r}")
+            sid = row.get("stimulus_id") or args.stimulus_id
+            written = save_result(res, out_dir / stem, stimulus_id=sid)
+            print(f"{Path(src_path).name}: {written['meta']}")
+        print(f"batched {len(results)} inputs through {len(models)} model(s), "
+              f"each model loaded once")
+        return 0
 
     try:
         result = score_audio(
