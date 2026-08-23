@@ -79,3 +79,39 @@ def test_structural_vocabulary_matches_the_text_extractors():
     from aud2psy.models.transcribe import SEGMENT_COLUMNS, WORD_COLUMNS
 
     assert "segment_idx" not in SEGMENT_COLUMNS + WORD_COLUMNS
+
+
+def test_sidecar_declares_both_transcribe_frames():
+    """`transcribe` writes two tables; only the segments frame was declared.
+
+    That left `transcribe_probability` -- words-only -- emitted but absent
+    from 1,060 sidecars. The column was correctly prefixed, so psytwill
+    attributed it and the aggregated data is right; what was wrong is the
+    sidecar's account of it. Found 2026-08-23 by the campaign gate once it
+    checked emission against the sidecar in both directions, having missed
+    it (and two harder defects) while it read declarations only.
+    """
+    import pandas as pd
+
+    from aud2psy.models.transcribe import SEGMENT_COLUMNS, WORD_COLUMNS
+    from aud2psy.pipeline import _transcribe_columns
+
+    declared = _transcribe_columns(
+        pd.DataFrame(columns=SEGMENT_COLUMNS),
+        pd.DataFrame(columns=WORD_COLUMNS),
+    )
+    for column in SEGMENT_COLUMNS + WORD_COLUMNS:
+        assert column in declared, f"{column} emitted but not declared"
+    assert "transcribe_probability" in declared
+    assert len(declared) == len(set(declared)), "declared columns duplicated"
+
+
+def test_transcribe_columns_tolerates_no_words_frame():
+    """A transcript with no words still declares its segment columns."""
+    import pandas as pd
+
+    from aud2psy.models.transcribe import SEGMENT_COLUMNS
+    from aud2psy.pipeline import _transcribe_columns
+
+    declared = _transcribe_columns(pd.DataFrame(columns=SEGMENT_COLUMNS), None)
+    assert declared == list(SEGMENT_COLUMNS)

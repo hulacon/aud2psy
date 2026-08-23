@@ -5,6 +5,60 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.1] - 2026-08-23
+
+### Fixed
+
+- **`transcribe` declared only one of its two frames.** It is the only model
+  here that writes both a segments table and a words table, and `pipeline.py`
+  set `models.transcribe.columns` to `list(transcript_df.columns)` — the
+  segments frame — at all four of its sites. The words frame's own columns
+  were never declared, leaving `transcribe_probability` emitted but
+  undeclared in **1,060** sidecars across the MMMData feature store.
+
+  No data was wrong: the column is correctly prefixed, psytwill attributed it
+  by prefix, and it is present in the aggregates. What was wrong is the
+  sidecar's account of itself — and a consumer that trusts declarations to
+  decide what a column *is* would have skipped it.
+
+  `_transcribe_columns()` now declares the union of both frames, in emitted
+  order. Two tests in `test_column_prefixes.py` cover it, including the
+  no-words-frame case.
+
+  Found by the mmmdata campaign gate (`stimfeat_campaign.py verify`) once it
+  was changed to check emission against the sidecar in **both** directions.
+  The previous gate inspected only columns the sidecar *declared*, so an
+  emitted-but-undeclared column was invisible to it by construction — the
+  same blind spot, mirrored, that let `is_downbeat` through in 0.15.0.
+  Existing sidecars were backfilled in place by
+  `mmmdata/scripts/patch_transcribe_sidecars.py` rather than re-extracted:
+  re-running Whisper to correct a provenance field is ~3.5 GPU-h.
+
+## [0.15.0] - 2026-08-23
+
+### Changed
+
+- **BREAKING: `beats` and `transcribe` columns now carry their model prefix**
+  (§4.1). `is_downbeat` → `beats_is_downbeat`; `text`, `asr_confidence`,
+  `no_speech_prob`, `probability` → `transcribe_*`. Unprefixed feature columns
+  are invisible to a consumer's resolver, which drops them onto a null model
+  and then collides them across models — `movies/audio/beats` had 8,392 rows
+  attributed to nothing. All 17 models were scanned with psytwill's own
+  resolver; only these two were non-compliant.
+- **BREAKING: `segment_idx` → `chunk_idx`.** A transcript segment *is* a
+  chunk, the same grouping level word2psy emits for text. One structural
+  vocabulary across extractors means a consumer needs one key rather than one
+  per extractor, and it meant no new reserved column had to enter Contract B.
+
+### Added
+
+- **`transcribe` gains `word_idx`.** Whisper can give two words identical
+  start and end times, so timings do not identify a word row — that was the
+  ~158 duplicate keys `movies/audio/transcript_words` refused on.
+- `test_column_prefixes.py`, ported from word2psy, which reads the declared
+  column lists and so needs no weights and no audio. word2psy had this test
+  and aud2psy did not, which is the whole reason these defects survived.
+
 ## [0.14.0] - 2026-08-22
 
 ### Added

@@ -74,6 +74,24 @@ def get_model(name: str, **kwargs):
     return cls(**kwargs)
 
 
+def _transcribe_columns(transcript_df, words_df) -> list:
+    """Every column the `transcribe` model writes, across both its tables.
+
+    `transcribe` is the one model here that emits two frames -- segments and
+    words -- and only the segments frame used to be declared. That left
+    `transcribe_probability` (words-only) emitted but undeclared in 1,060
+    sidecars: correctly prefixed, so psytwill attributed it and the data is
+    right, but the sidecar did not admit the column existed. A sidecar that
+    under-declares is the same "declared != emitted" defect as one that
+    over-declares, just in the other direction, and a gate reading only
+    declarations cannot see either.
+    """
+    seen = list(transcript_df.columns)
+    if words_df is not None:
+        seen += [c for c in words_df.columns if c not in seen]
+    return seen
+
+
 def score_audio(
     path: str | Path,
     models: list[str],
@@ -206,7 +224,7 @@ def score_audio(
         transcript_df, words_df, transcribe_info = model.transcribe(y_16k, WHISPER_SR)
         model.unload()
         model_meta["transcribe"] = {
-            "columns": list(transcript_df.columns),
+            "columns": _transcribe_columns(transcript_df, words_df),
             "runtime_sec": round(time.time() - t_model, 2),
             "package_version": get_model_version("transcribe"),
             "checkpoint": whisper_model,  # actual id, incl. the verbatim swap
@@ -233,7 +251,8 @@ def score_audio(
         from .models.diarize import merge_speakers
 
         merge_speakers(transcript_df, words_df, exclusive_df)
-        model_meta["transcribe"]["columns"] = list(transcript_df.columns)
+        model_meta["transcribe"]["columns"] = _transcribe_columns(
+            transcript_df, words_df)
 
     meta = build_sidecar(
         input_path=path,
@@ -441,7 +460,7 @@ def score_audio_batch(
                 transcript_df[i], words_df[i], transcribe_info[i] = model.transcribe(
                     load_audio(p, WHISPER_SR), WHISPER_SR)
                 model_meta[i]["transcribe"] = {
-                    "columns": list(transcript_df[i].columns),
+                    "columns": _transcribe_columns(transcript_df[i], words_df[i]),
                     "runtime_sec": round(time.time() - t_model, 2),
                 }
                 _record(i, "transcribe", model, None, t_model)
@@ -466,7 +485,8 @@ def score_audio_batch(
             from .models.diarize import merge_speakers
 
             merge_speakers(transcript_df[i], words_df[i], exclusive_df[i])
-            model_meta[i]["transcribe"]["columns"] = list(transcript_df[i].columns)
+            model_meta[i]["transcribe"]["columns"] = _transcribe_columns(
+                transcript_df[i], words_df[i])
         meta = build_sidecar(
             input_path=p,
             input_type=in_type[i],
