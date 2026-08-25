@@ -101,10 +101,16 @@ def score_audio(
     wordpool: str | Path | None = None,
     clap_model: str | None = None,
     num_speakers: int | None = None,
+    speakers_csv: str | Path | None = None,
     verbatim: bool = False,
     show_progress: bool = True,
 ) -> ScoreResult:
-    """Run the named models on one audio/video file."""
+    """Run the named models on one audio/video file.
+
+    ``speakers_csv``: an existing diarize turn table ({stem}_speakers.csv)
+    for the ``conversation`` model, instead of running ``diarize`` in the
+    same call; when given, it is the turn source even if diarize also runs.
+    """
     from tqdm import tqdm
 
     path = Path(path)
@@ -112,14 +118,24 @@ def score_audio(
     t0 = time.time()
 
     from .cli import MODEL_REGISTRY
+    from .exceptions import Aud2PsyError
 
     unknown = [m for m in models if m not in MODEL_REGISTRY]
     if unknown:
         raise KeyError(f"Unknown model(s): {unknown}; see --list-models")
-    frame_names = [m for m in models if m not in ("transcribe", "beats", "diarize")]
+    frame_names = [
+        m for m in models if m not in ("transcribe", "beats", "diarize", "conversation")
+    ]
     do_transcribe = "transcribe" in models
     do_beats = "beats" in models
     do_diarize = "diarize" in models
+    do_conversation = "conversation" in models
+    if do_conversation and not do_diarize and speakers_csv is None:
+        raise Aud2PsyError(
+            "the conversation model derives from the diarize turn table; "
+            "run it together with diarize, or pass an existing "
+            "{stem}_speakers.csv via speakers_csv (CLI: --speakers)"
+        )
 
     audio_cache: dict[int, np.ndarray] = {}
 
@@ -210,6 +226,37 @@ def score_audio(
             "checkpoint": getattr(model, "checkpoint", None),
         }
 
+    if do_conversation:
+        from .models.conversation import load_turns_csv
+
+        if speakers_csv is not None:
+            turns_df = load_turns_csv(speakers_csv)
+            turns_source = str(speakers_csv)
+        else:
+            turns_df = speakers_df
+            turns_source = "diarize (this run)"
+        if duration is None:
+            duration = len(audio_at(FEATURE_SR)) / FEATURE_SR
+        if grid is None:
+            grid = Grid.for_duration(duration, hop)
+        model = get_model("conversation")
+        t_model = time.time()
+        model.load()
+        features = model.derive(turns_df, grid)
+        model.unload()
+        if frames_df is None:
+            frames_df = pd.DataFrame({"time": grid.centers})
+        for feat, values in features.items():
+            frames_df[feat] = values
+        model_meta["conversation"] = {
+            "columns": list(features),
+            "runtime_sec": round(time.time() - t_model, 2),
+            "package_version": get_model_version("conversation"),
+            "checkpoint": None,
+            "turns_source": turns_source,
+            **model.info_,
+        }
+
     transcript_df = words_df = recall_df = None
     if do_transcribe:
         y_16k = audio_at(WHISPER_SR)
@@ -258,7 +305,7 @@ def score_audio(
         input_path=path,
         input_type=in_type,
         duration=duration,
-        hop=hop if frame_names else None,
+        hop=hop if (frame_names or do_conversation) else None,
         n_frames=grid.n_windows if grid else None,
         model_meta=model_meta,
         whisper_model=whisper_model if do_transcribe else None,
@@ -328,10 +375,20 @@ def score_audio_batch(
     if unknown:
         raise KeyError(f"Unknown model(s): {unknown}; see --list-models")
 
-    frame_names = [m for m in models if m not in ("transcribe", "beats", "diarize")]
+    frame_names = [
+        m for m in models if m not in ("transcribe", "beats", "diarize", "conversation")
+    ]
     do_transcribe = "transcribe" in models
     do_beats = "beats" in models
     do_diarize = "diarize" in models
+    do_conversation = "conversation" in models
+    if do_conversation and not do_diarize:
+        from .exceptions import Aud2PsyError
+
+        raise Aud2PsyError(
+            "in a batch, the conversation model needs diarize in the same call "
+            "(a single speakers_csv cannot map onto several inputs)"
+        )
 
     n = len(paths)
     t0 = [time.time()] * n
@@ -444,6 +501,23 @@ def score_audio_batch(
         finally:
             model.unload()
 
+    if do_conversation:
+        model = get_model("conversation")
+        model.load()
+        try:
+            for i in range(n):
+                t_model = time.time()
+                if grids[i] is None:
+                    grids[i] = Grid.for_duration(duration[i], hop)
+                    columns[i]["time"] = grids[i].centers
+                feats = model.derive(speakers_df[i], grids[i])
+                for feat, values in feats.items():
+                    columns[i][feat] = values
+                _record(i, "conversation", model, feats, t_model)
+                model_meta[i]["conversation"]["turns_source"] = "diarize (this run)"
+        finally:
+            model.unload()
+
     if do_transcribe:
         _durations(WHISPER_SR)
         model = get_model("transcribe", whisper_model=whisper_model,
@@ -476,7 +550,7 @@ def score_audio_batch(
     # Cross-model per-file post-processing, identical to score_audio's tail.
     results = []
     for i, p in enumerate(paths):
-        frames = pd.DataFrame(columns[i]) if frame_names else None
+        frames = pd.DataFrame(columns[i]) if (frame_names or do_conversation) else None
         if (transcript_df[i] is not None and len(transcript_df[i])
                 and frames is not None and "pitch" in frame_names):
             annotate_voice_gender(transcript_df[i], frames, hop)
@@ -491,7 +565,7 @@ def score_audio_batch(
             input_path=p,
             input_type=in_type[i],
             duration=duration[i],
-            hop=hop if frame_names else None,
+            hop=hop if (frame_names or do_conversation) else None,
             n_frames=grids[i].n_windows if grids[i] else None,
             model_meta=model_meta[i],
             whisper_model=whisper_model if do_transcribe else None,

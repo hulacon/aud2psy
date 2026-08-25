@@ -27,6 +27,7 @@ def get_model_version(model_name: str) -> str:
         "egemaps": ("opensmile", None),
         "beats": ("beat_this", None),
         "diarize": ("pyannote.audio", None),
+        "conversation": ("aud2psy", None),  # analytic; derives from diarize output
     }
     pkg, fallback = version_map.get(model_name, (None, "unknown"))
     if pkg:

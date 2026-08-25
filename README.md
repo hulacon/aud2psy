@@ -87,6 +87,7 @@ speaker-identity tracking, use the `diarize` model (below).
 | `sound_events` | frame | 16 | `sound_events_speech`, `_music`, `_singing`, `_laughter`, `_crying`, `_shouting`, `_crowd`, `_applause`, `_footsteps`, `_vehicle`, `_water`, `_wind`, `_animals`, `_gunshot_explosion`, `_siren_alarm`, `_thunder`: zero-shot cosine scores of each 10 s window against a text prompt bank in the CLAP space (see below) |
 | `speech_emotion` | frame | 3 | `speech_emotion_valence`, `_arousal`, `_dominance` (~0–1): vocal affect from [audeering's wav2vec2 MSP-Podcast model](https://huggingface.co/audeering/wav2vec2-large-robust-12-ft-emotion-msp-dim) in 4 s windows; NaN where the window isn't speech (Silero-gated). Weights are CC-BY-NC-SA (research use) |
 | `egemaps` | frame | 25 | the 25 [eGeMAPS](https://audeering.github.io/opensmile/) v02 low-level descriptors via openSMILE: `egemaps_loudness`, spectral balance (`_alpha_ratio`, `_hammarberg`, `_slope_0_500`, `_slope_500_1500`, `_flux`), `_mfcc1`–`4`, and a voiced set (`_f0_semitone`, `_jitter`, `_shimmer`, `_hnr`, `_h1_h2`, `_h1_a3`, formant `_f1/f2/f3_freq/_bw/_amp`) that is NaN off-speech (Silero-gated); needs `pip install "aud2psy[egemaps]"` |
+| `conversation` | frame | 6 | `conversation_n_speakers` (distinct speakers active in the window), `_speech_fraction`, `_overlap_fraction` (≥ 2 concurrent speakers — crosstalk), `_turn_rate`, `_switch_rate` (turn onsets / speaker changes per second), `_turn_duration` (time-weighted mean active-turn duration, s; NaN in silence) — derived from the `diarize` turn table, no audio model of its own (see below) |
 | `beats` | events | — | beat/downbeat table (`time`, `is_downbeat`) via [beat_this](https://github.com/CPJKU/beat_this); needs `pip install "aud2psy[beats]"` |
 | `diarize` | events | — | speaker turn table via [pyannote community-1](https://huggingface.co/pyannote/speaker-diarization-community-1); needs `pip install "aud2psy[diarize]"` + a HuggingFace token (see below) |
 | `transcribe` | segment | — | time-stamped transcript export (faster-whisper, default `large-v3`; `--whisper-model` to change; `--verbatim` for disfluency-preserving CrisperWhisper mode, see below) |
@@ -115,6 +116,25 @@ transcript (majority-overlap speaker per segment) and words table
 identity via passthrough columns. `--num-speakers` is optional; without
 it the pipeline estimates the count. The sidecar records `n_speakers`,
 turn counts, and per-speaker speech time. Inference runs on CPU.
+
+## Conversation structure (conversation)
+
+`conversation` turns the diarize turn table into frame-level features —
+who-speaks-when as time courses (speaker count, turn and speaker-switch
+rate, speech and crosstalk fractions, mean turn duration) rather than an
+event table. It has no audio model of its own, so it needs a turn
+source: either run it with `diarize` in the same call, or point it at a
+turn table you already have —
+
+```bash
+aud2psy conversation diarize clip.mp4 -o scores.csv
+aud2psy conversation clip.mp4 -o scores.csv --speakers old_speakers.csv
+```
+
+The `--speakers` route skips pyannote entirely (no `[diarize]` extra, no
+HF token), which is the cheap path when diarization already ran. The
+sidecar records the turn source either way. Everything is derived from
+the raw turn table, so the two routes give identical values.
 
 ## Vocal affect (speech_emotion)
 

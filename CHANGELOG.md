@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.16.0] - 2026-08-25
+
+### Added
+
+- **`conversation` model:** frame-level conversation-structure features
+  derived from the `diarize` turn table — `conversation_n_speakers`,
+  `_speech_fraction`, `_overlap_fraction`, `_turn_rate`, `_switch_rate`,
+  `_turn_duration` (NaN in silence). It consumes turns rather than audio:
+  run it together with `diarize`, or point it at an existing
+  `{stem}_speakers.csv` via the new `--speakers` flag
+  (`speakers_csv=` in `score_audio`), which needs neither the `[diarize]`
+  extra nor an HF token. Everything derives from the *raw* turn table
+  (the exclusive timeline is never persisted), so the in-run and
+  from-CSV routes are bit-identical. The sidecar records the turn source
+  (`turns_source`), `derived_from: diarize`, and `n_turns`; `checkpoint`
+  is `null` (analytic) — speaker-label provenance stays with diarize's
+  own sidecar entry. In a batch, `conversation` requires `diarize` in
+  the same call (one CSV cannot map onto several inputs); with `--all`
+  and no pyannote installed, `conversation` is skipped alongside
+  `diarize` unless `--speakers` is given.
+
 ## [0.15.1] - 2026-08-23
 
 ### Fixed

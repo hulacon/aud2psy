@@ -28,6 +28,7 @@ MODEL_REGISTRY: dict[str, tuple[str, str, str]] = {
     "egemaps": ("aud2psy.models.egemaps", "EgemapsModel", "25 eGeMAPS prosody/voice-quality LLDs (openSMILE; needs the [egemaps] extra)"),
     "beats": ("aud2psy.models.beats", "BeatsModel", "Beat/downbeat event table (beat_this; needs the [beats] extra)"),
     "diarize": ("aud2psy.models.diarize", "DiarizeModel", "Speaker turn table (pyannote community-1; needs the [diarize] extra + HF token)"),
+    "conversation": ("aud2psy.models.conversation", "ConversationModel", "Windowed conversation structure derived from the diarize turn table (speakers, turn/switch rate, speech and overlap fractions)"),
     "transcribe": ("aud2psy.models.transcribe", "TranscribeModel", "Time-stamped transcript export for word2psy (faster-whisper)"),
 }
 
@@ -78,6 +79,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--num-speakers", type=int, default=None, metavar="N",
                         help="exact speaker count hint for the diarize model "
                              "(default: let the pipeline estimate)")
+    parser.add_argument("--speakers", default=None, metavar="CSV",
+                        help="existing diarize turn table (a *_speakers.csv) for "
+                             "the conversation model, instead of running diarize "
+                             "in the same call")
     parser.add_argument("--wordpool", default=None, metavar="PATH",
                         help="wordpool file (one item per line) for free-recall "
                              "annotation; requires the transcribe model and adds "
@@ -309,6 +314,13 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
             models.remove("diarize")
+            if not args.speakers:
+                print(
+                    "note: skipping conversation too (it derives from the "
+                    "diarize turn table; pass --speakers to keep it)",
+                    file=sys.stderr,
+                )
+                models.remove("conversation")
         if importlib.util.find_spec("opensmile") is None:
             print(
                 "note: skipping egemaps (optional dependency not installed; "
@@ -329,6 +341,17 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--verbatim selects the CrisperWhisper checkpoint; drop --whisper-model")
     if args.num_speakers and "diarize" not in models:
         parser.error("--num-speakers requires the diarize model")
+    if args.speakers and "conversation" not in models:
+        parser.error("--speakers requires the conversation model")
+    if args.speakers and "diarize" in models:
+        parser.error("--speakers replaces the diarize run as the conversation "
+                     "model's turn source; drop diarize or drop --speakers")
+    if "conversation" in models and "diarize" not in models and not args.speakers:
+        parser.error("conversation derives from the diarize turn table; add the "
+                     "diarize model, or pass --speakers existing_speakers.csv")
+    if args.speakers and len(input_paths) > 1:
+        parser.error("--speakers maps one turn table onto one input; with several "
+                     "inputs run conversation together with diarize instead")
 
     from .exceptions import Aud2PsyError
     from .pipeline import save_result, score_audio, score_audio_batch
@@ -382,6 +405,7 @@ def main(argv: list[str] | None = None) -> int:
             wordpool=args.wordpool,
             clap_model=args.clap_model,
             num_speakers=args.num_speakers,
+            speakers_csv=args.speakers,
             verbatim=args.verbatim,
         )
     except Aud2PsyError as exc:
