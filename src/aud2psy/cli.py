@@ -29,6 +29,7 @@ MODEL_REGISTRY: dict[str, tuple[str, str, str]] = {
     "beats": ("aud2psy.models.beats", "BeatsModel", "Beat/downbeat event table (beat_this; needs the [beats] extra)"),
     "diarize": ("aud2psy.models.diarize", "DiarizeModel", "Speaker turn table (pyannote community-1; needs the [diarize] extra + HF token)"),
     "conversation": ("aud2psy.models.conversation", "ConversationModel", "Windowed conversation structure derived from the diarize turn table (speakers, turn/switch rate, speech and overlap fractions)"),
+    "speech_rate": ("aud2psy.models.speech_rate", "SpeechRateModel", "Windowed speaking rate derived from the transcribe word timestamps (words/s, word duration, pauses)"),
     "transcribe": ("aud2psy.models.transcribe", "TranscribeModel", "Time-stamped transcript export for word2psy (faster-whisper)"),
 }
 
@@ -83,6 +84,10 @@ def build_parser() -> argparse.ArgumentParser:
                         help="existing diarize turn table (a *_speakers.csv) for "
                              "the conversation model, instead of running diarize "
                              "in the same call")
+    parser.add_argument("--words", default=None, metavar="CSV",
+                        help="existing word-timestamp table (a "
+                             "*_transcript_words.csv) for the speech_rate model, "
+                             "instead of running transcribe in the same call")
     parser.add_argument("--wordpool", default=None, metavar="PATH",
                         help="wordpool file (one item per line) for free-recall "
                              "annotation; requires the transcribe model and adds "
@@ -352,6 +357,18 @@ def main(argv: list[str] | None = None) -> int:
     if args.speakers and len(input_paths) > 1:
         parser.error("--speakers maps one turn table onto one input; with several "
                      "inputs run conversation together with diarize instead")
+    if args.words and "speech_rate" not in models:
+        parser.error("--words requires the speech_rate model")
+    if args.words and "transcribe" in models:
+        parser.error("--words replaces the transcribe run as the speech_rate "
+                     "model's word source; drop transcribe or drop --words")
+    if "speech_rate" in models and "transcribe" not in models and not args.words:
+        parser.error("speech_rate derives from the transcribe word timestamps; "
+                     "add the transcribe model, or pass --words "
+                     "existing_transcript_words.csv")
+    if args.words and len(input_paths) > 1:
+        parser.error("--words maps one word table onto one input; with several "
+                     "inputs run speech_rate together with transcribe instead")
 
     from .exceptions import Aud2PsyError
     from .pipeline import save_result, score_audio, score_audio_batch
@@ -406,6 +423,7 @@ def main(argv: list[str] | None = None) -> int:
             clap_model=args.clap_model,
             num_speakers=args.num_speakers,
             speakers_csv=args.speakers,
+            words_csv=args.words,
             verbatim=args.verbatim,
         )
     except Aud2PsyError as exc:

@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.17.0] - 2026-08-25
+
+### Added
+
+- **`speech_rate` model:** the conversation pattern applied to
+  `transcribe` — three frame-level speaking-rate features derived from
+  the word timestamps: `speech_rate_words` (word onsets/s),
+  `_word_duration` (time-weighted mean active-word duration, NaN where
+  no word is active), `_pauses` (within-utterance silent pauses/s; a gap
+  between consecutive words counts when in [0.15, 2.0) s — shorter is
+  articulatory, longer is an utterance boundary). Word source is either
+  `transcribe` in the same call or an existing
+  `{stem}_transcript_words.csv` via the new `--words` flag (`words_csv=`
+  in `score_audio`). Analytic (`checkpoint` null); the sidecar records
+  `words_source`, `derived_from`, `n_words`, and the pause-gap bounds.
+  In a batch, `speech_rate` requires `transcribe` in the same call.
+  Whisper word timings are fine for windowed rates, not onset-locked
+  latencies (see the existing timing caveat).
+
 ## [0.16.0] - 2026-08-25
 
 ### Added
