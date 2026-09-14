@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `aud2psy viz browse` accepts multiple scores paths, or a directory of
+  per-model `*_frames.csv` files, and merges them into one all-models
+  dashboard (`aud2psy.viz.merge`). Frames on the spine's exact time grid
+  merge exactly; offset grids merge to the nearest spine row within half
+  the sampling step. Directory-collected tables that cannot merge 1:1
+  (e.g. diarization segments) are skipped with a note.
+
 ## [0.17.0] - 2026-08-25
 
 ### Added

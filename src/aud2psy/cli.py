@@ -146,20 +146,53 @@ def _viz_browse(args) -> int:
     import pandas as pd
 
     from .viz.dashboard import create_dashboard, prepare_audio
+    from .viz.merge import collect_frames_csvs, merge_frames
 
-    frames_path, transcript_path, meta_path = resolve_scores_paths(args.csv)
-    if frames_path is None and transcript_path is None:
-        print(
-            f"error: no scores files found for {args.csv} "
-            f"(looked for *_frames.csv / *_transcript.csv)",
-            file=sys.stderr,
+    # Expand each input: a directory yields all its *_frames.csv (lenient —
+    # unmergeable tables are skipped); a file/base resolves as before.
+    frames_paths: list[Path] = []
+    lenient: set[str] = set()
+    transcript_path = None
+    meta_path = None
+    for raw in args.csv:
+        p = Path(raw)
+        if p.is_dir():
+            found_frames = collect_frames_csvs(p)
+            frames_paths.extend(found_frames)
+            lenient.update(str(f) for f in found_frames)
+            for t in sorted(p.glob("*_transcript.csv")):
+                transcript_path = transcript_path or t
+        else:
+            f_path, t_path, m_path = resolve_scores_paths(p)
+            if f_path is None and t_path is None:
+                print(
+                    f"error: no scores files found for {p} "
+                    f"(looked for *_frames.csv / *_transcript.csv)",
+                    file=sys.stderr,
+                )
+                return 1
+            if f_path:
+                frames_paths.append(f_path)
+            transcript_path = transcript_path or t_path
+            meta_path = meta_path or m_path
+
+    if len(frames_paths) <= 1:
+        frames_df = pd.read_csv(frames_paths[0]) if frames_paths else None
+    else:
+        frames_df = merge_frames(
+            {str(p): pd.read_csv(p) for p in frames_paths},
+            lenient=lenient,
         )
-        return 1
+        print(f"Merged {len(frames_paths)} frames files")
+    if meta_path is None and frames_paths:
+        # Sidecar of the first frames file's model, for hop/input info.
+        candidate = frames_paths[0].parent / (
+            frames_paths[0].name[: -len("_frames.csv")] + ".meta.json")
+        meta_path = candidate if candidate.exists() else None
 
-    frames_df = pd.read_csv(frames_path) if frames_path else None
     transcript_df = pd.read_csv(transcript_path) if transcript_path else None
     meta = json.loads(meta_path.read_text()) if meta_path else None
-    found = ", ".join(str(p) for p in (frames_path, transcript_path) if p)
+    found = ", ".join(str(p) for p in (*frames_paths, transcript_path) if p)
     print(f"Building dashboard from {found}...")
 
     # Audio to embed: --audio flag, else the sidecar's recorded input path
@@ -183,7 +216,7 @@ def _viz_browse(args) -> int:
             file=sys.stderr,
         )
 
-    args_csv = Path(args.csv)
+    args_csv = Path(args.csv[0])
     try:
         html = create_dashboard(
             frames_df,
@@ -197,11 +230,16 @@ def _viz_browse(args) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 1
 
-    base = args_csv.name
-    for suffix in ("_frames.csv", "_transcript.csv"):
-        if base.endswith(suffix):
-            base = base[: -len(suffix)]
-    output = args.output or args_csv.parent / f"{Path(base).stem}_browse.html"
+    if len(frames_paths) > 1:
+        default_out = args_csv / "combined_browse.html" if args_csv.is_dir() \
+            else args_csv.parent / "combined_browse.html"
+    else:
+        base = args_csv.name
+        for suffix in ("_frames.csv", "_transcript.csv"):
+            if base.endswith(suffix):
+                base = base[: -len(suffix)]
+        default_out = args_csv.parent / f"{Path(base).stem}_browse.html"
+    output = args.output or default_out
     output = Path(output)
     output.write_text(html, encoding="utf-8")
     print(f"Saved dashboard to {output}")
@@ -227,7 +265,10 @@ def _viz_main(argv: list[str]) -> int:
     )
     p_br.add_argument(
         "csv",
-        help="Scores path (scores.csv base, or a *_frames.csv / *_transcript.csv file).",
+        nargs="+",
+        help="Scores path(s): scores.csv bases, *_frames.csv / "
+             "*_transcript.csv files, or a directory of per-model frames "
+             "CSVs — multiple inputs merge into one all-models dashboard.",
     )
     p_br.add_argument("-o", "--output", help="Output HTML path.")
     p_br.add_argument("--audio", metavar="PATH",
