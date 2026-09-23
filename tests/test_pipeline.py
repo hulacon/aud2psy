@@ -54,7 +54,7 @@ def test_save_result_file_layout(wav_factory, tmp_path):
     assert written["frames"].name == "scores_frames.csv"
     assert written["meta"].name == "scores.meta.json"
     meta = json.loads(written["meta"].read_text())
-    assert meta["schema_version"] == "1.0"
+    assert meta["schema_version"] == "1.1"
     assert meta["extractor"] == "aud2psy"
     assert meta["extractor_version"] == meta["aud2psy_version"]  # legacy key kept
     assert meta["input"]["duration_sec"] == 2.0

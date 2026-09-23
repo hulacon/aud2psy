@@ -48,7 +48,10 @@ default; `--stimulus-id` overrides it) — the join key shared with viz2psy
 and word2psy outputs. The `.meta.json` sidecar carries `schema_version`,
 `extractor`, and, per model, the package version and exact `checkpoint`
 identifier (`null` for analytic models), so every CSV is traceable to the
-weights that produced it.
+weights that produced it. Each model entry also carries `nulls` (Contract B
+schema 1.1): which of its columns can be NaN and what that means — e.g.
+`pitch_f0` is `undefined` when a window is unvoiced. `aud2psy sidecar refresh
+DIR` brings older sidecars up to date without touching a CSV.
 
 A wordless clip produces a zero-row transcript and `n_speech_segments: 0`
 in the sidecar — an explicit result, not an error.

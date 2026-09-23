@@ -294,11 +294,50 @@ def _viz_main(argv: list[str]) -> int:
     return _viz_browse(args)
 
 
+def _sidecar_main(argv: list[str]) -> int:
+    """Handle 'aud2psy sidecar ...' subcommands."""
+    parser = argparse.ArgumentParser(prog="aud2psy sidecar",
+                                     description="Maintain existing .meta.json sidecars.")
+    sub = parser.add_subparsers(dest="sidecar_cmd")
+    p_rf = sub.add_parser(
+        "refresh",
+        help="Bring sidecars to the current Contract B schema (1.1: per-model `nulls`). "
+             "Rewrites JSON only, never a CSV; refuses a sidecar whose tables hold NaN in "
+             "an undeclared column.",
+    )
+    p_rf.add_argument("paths", nargs="+",
+                      help=".meta.json files, or directories searched recursively "
+                           "(sidecars from other extractors are skipped)")
+    p_rf.add_argument("--dry-run", action="store_true", help="Check and report; write nothing.")
+    args = parser.parse_args(argv)
+    if args.sidecar_cmd is None:
+        parser.print_help()
+        return 1
+
+    from collections import Counter
+
+    from .sidecar import find_sidecars, refresh_sidecar
+
+    counts: Counter = Counter()
+    for path in find_sidecars(args.paths):
+        r = refresh_sidecar(path, dry_run=args.dry_run)
+        counts[r.status] += 1
+        if r.status == "refused":
+            cols = "; ".join(f"{m}: {', '.join(c)}" for m, c in r.undeclared.items())
+            print(f"REFUSED {path}: {cols}", file=sys.stderr)
+    verb = "would refresh" if args.dry_run else "refreshed"
+    print(f"aud2psy sidecar refresh: {counts['refreshed']} {verb}, {counts['unchanged']} unchanged, "
+          f"{counts['refused']} refused, {counts['skipped']} skipped (other extractors)")
+    return 1 if counts["refused"] else 0
+
+
 def main(argv: list[str] | None = None) -> int:
     if argv is None:
         argv = sys.argv[1:]
     if argv and argv[0] == "viz":
         return _viz_main(argv[1:])
+    if argv and argv[0] == "sidecar":
+        return _sidecar_main(argv[1:])
 
     parser = build_parser()
     args = parser.parse_args(argv)

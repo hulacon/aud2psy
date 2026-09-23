@@ -34,7 +34,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from .base import BaseModel
+from .base import BaseModel, undefined, undefinable_trailing
 from .speech_emotion import GATE_MIN_SPEECH, speech_fraction
 
 FEATURE_SET = "eGeMAPSv02"
@@ -74,6 +74,13 @@ VOICED_RAW = tuple(n for n in RAW_TO_CLEAN if n.endswith("_sma3nz"))
 
 class EgemapsModel(BaseModel):
     name = "egemaps"
+    nulls = {
+        **undefinable_trailing(*(c for n, c in RAW_TO_CLEAN.items() if n not in VOICED_RAW)),
+        **{RAW_TO_CLEAN[n]: undefined(
+            "every frame in the grid window is unvoiced (openSMILE nz zero), or the window's "
+            "Silero speech fraction is below GATE_MIN_SPEECH (0.25)", trailing=True)
+           for n in VOICED_RAW},
+    }
     level = "frame"
     # eGeMAPS's reference rate; also what Silero VAD wants, and openSMILE's
     # 10 ms hop lands on integer samples here (221-sample steps at 22050)

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from .base import BaseModel
+from .base import BaseModel, undefined, undefinable_trailing
 
 FMIN = 65.0  # ~C2, below typical male f0
 FMAX = 2093.0  # ~C7, above soprano range
@@ -17,6 +17,12 @@ FRAME_LENGTH = 2048
 
 class PitchModel(BaseModel):
     name = "pitch"
+    nulls = {
+        "pitch_f0": undefined(
+            "every pYIN frame in the grid window is unvoiced (silence, noise, unpitched sound)",
+            trailing=True),
+        **undefinable_trailing("pitch_voiced_prob"),
+    }
     level = "frame"
 
     def extract(self, y: np.ndarray, sr: int, grid) -> dict[str, np.ndarray]:

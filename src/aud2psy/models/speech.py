@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from .base import BaseModel
+from .base import BaseModel, undefinable_trailing
 
 VAD_SR = 16000
 VAD_WINDOW = 512  # samples per probability at 16 kHz
@@ -30,6 +30,7 @@ def _silero_asset_name() -> str:
 
 class SpeechModel(BaseModel):
     name = "speech"
+    nulls = undefinable_trailing("speech_prob")
     level = "frame"
 
     def load(self) -> None:

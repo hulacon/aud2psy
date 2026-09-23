@@ -41,6 +41,41 @@ def get_model_version(model_name: str) -> str:
     return fallback or "unknown"
 
 
+SCHEMA_VERSION = "1.1"  # Contract B §4.1 extractor output convention
+
+
+def declared_nulls(model_name: str) -> dict[str, dict[str, str]]:
+    """The model's Contract B 1.1 ``nulls`` map, read from its class.
+
+    Every model module imports only numpy/pandas at top level, so this never
+    loads weights. A name outside the registry is a caller bug and raises.
+    """
+    import importlib
+
+    from .cli import MODEL_REGISTRY
+
+    module_path, class_name, _ = MODEL_REGISTRY[model_name]
+    cls = getattr(importlib.import_module(module_path), class_name)
+    return {col: dict(entry) for col, entry in cls.nulls.items()}
+
+
+def stamp_nulls(model_meta: dict) -> dict:
+    """Set ``nulls`` on every model entry from its class (overwriting any stale map).
+
+    Where the entry lists its ``columns``, only declarations for columns it
+    actually emitted are kept: a key must name a real column (§4.1), and some
+    columns exist only in some runs (``median_f0`` needs pitch alongside
+    transcribe).
+    """
+    for name, entry in model_meta.items():
+        declared = declared_nulls(name)
+        if "columns" in entry:
+            emitted = set(entry["columns"])
+            declared = {c: e for c, e in declared.items() if c in emitted}
+        entry["nulls"] = declared
+    return model_meta
+
+
 def build_sidecar(
     input_path: Path,
     input_type: str,
@@ -57,7 +92,7 @@ def build_sidecar(
     from . import __version__
 
     meta: dict = {
-        "schema_version": "1.0",  # Contract B §4.1 extractor output convention
+        "schema_version": SCHEMA_VERSION,
         "extractor": "aud2psy",
         "extractor_version": __version__,
         "aud2psy_version": __version__,  # legacy key, one deprecation cycle
@@ -67,7 +102,7 @@ def build_sidecar(
             "path": str(input_path),
             "duration_sec": round(duration, 3) if duration is not None else None,
         },
-        "models": model_meta,
+        "models": stamp_nulls(model_meta),
         "total_runtime_sec": total_runtime_sec,
     }
     if hop is not None:

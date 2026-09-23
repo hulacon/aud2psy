@@ -28,6 +28,7 @@ from importlib import resources
 
 import numpy as np
 
+from .base import undefined
 from .clap import SILENCE_DBFS, ClapModel, silent_windows
 
 PROBE_RESOURCE = "music_emotion_probe.npz"
@@ -47,6 +48,9 @@ def load_probe():
 
 class MusicEmotionModel(ClapModel):
     name = "music_emotion"
+    nulls = {f"music_emotion_{d}": undefined(
+        "the 10 s CLAP context window is below SILENCE_DBFS (-80 dBFS): digital silence")
+        for d in DIMENSIONS}
     level = "frame"
 
     def load(self) -> None:

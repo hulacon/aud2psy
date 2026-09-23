@@ -50,6 +50,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from .base import undefined
 from .clap import SILENCE_DBFS, ClapModel, silent_windows
 
 # category -> prompt ensemble. Keys become columns: sound_events_<key>.
@@ -87,6 +88,9 @@ PROMPT_BANK: dict[str, list[str]] = {
 
 class SoundEventsModel(ClapModel):
     name = "sound_events"
+    nulls = {f"sound_events_{c}": undefined(
+        "the 10 s CLAP context window is below SILENCE_DBFS (-80 dBFS): digital silence")
+        for c in PROMPT_BANK}
     level = "frame"
 
     def load(self) -> None:

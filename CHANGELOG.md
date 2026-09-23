@@ -7,7 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-09-23
+
 ### Added
+
+- **Contract B schema 1.1 (`nulls`):** every model entry in the sidecar
+  carries `nulls`, a map from each column the model can set to NaN to
+  `{"means", "when"}` (constellation-contracts §4.1). Declared on the model
+  class (`BaseModel.nulls`, `{}` = never null) and stamped by
+  `metadata.stamp_nulls`, filtered to the columns the run emitted. 16 models
+  declare 90 columns. 44 are `undefined` (content gates): pitch_f0, egemaps
+  (15 voiced), tonal, psychoacoustic sharpness, speech_emotion, speech_rate,
+  conversation, sound_events (16, CLAP silence gate), music_emotion (2, same
+  gate), transcribe's `median_f0`. 46 are `undefinable`: every grid-reduced
+  column is NaN on a trailing window that no native frame centre reaches (a
+  clip ending a few ms into its last window; at most one row per clip), found
+  by `sidecar refresh` on real corpora (`base.TRAILING_WINDOW`). Gated columns
+  keep `undefined` and name the trailing case in `when`. `schema_version` is
+  now `"1.1"`.
+- `aud2psy sidecar refresh PATH... [--dry-run]`: rewrites existing sidecars
+  to 1.1 in place (JSON only, never a CSV). Each model's columns are read back
+  from the family's `output` tables, and a NaN in an undeclared column refuses
+  that sidecar with nothing written. Idempotent; records a `refreshed` entry.
+- `tests/test_nulls.py`: the producer-duty contract test, with a fixture per
+  declared condition (silence, tone, noise, silence-then-tone, gapped turn and
+  word tables, an unvoiced segment), asserting in both directions.
 
 - `aud2psy viz browse` accepts multiple scores paths, or a directory of
   per-model `*_frames.csv` files, and merges them into one all-models

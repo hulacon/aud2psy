@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from .base import BaseModel
+from .base import BaseModel, undefinable_trailing
 
 FRAME_LENGTH = 2048
 HOP_LENGTH = 512
@@ -12,6 +12,7 @@ HOP_LENGTH = 512
 
 class LoudnessModel(BaseModel):
     name = "loudness"
+    nulls = undefinable_trailing("loudness_rms", "loudness_db")
     level = "frame"
 
     def extract(self, y: np.ndarray, sr: int, grid) -> dict[str, np.ndarray]:

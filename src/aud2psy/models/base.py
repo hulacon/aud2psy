@@ -18,6 +18,28 @@ After extraction the pipeline records ``feature_names_`` on the instance.
 from __future__ import annotations
 
 
+# Grid-reduced columns (grid.average / grid.window_max over native frames) are
+# NaN on a trailing window that no native frame centre reaches: the clip ends a
+# few ms into its last window (measured on the fit corpora, 2026-09-23 — e.g.
+# a 705.503 s clip's window [705.5, 706)). Positional, so ``undefinable``.
+TRAILING_WINDOW = ("the clip's trailing grid window, when the clip ends before any native "
+                   "frame is centred in it (at most one row per clip)")
+
+
+def undefined(when: str, *, trailing: bool = False) -> dict[str, str]:
+    """A Contract B 1.1 ``nulls`` entry: the stimulus lacks what the column measures.
+
+    ``trailing=True`` names the positional trailing-window null as the column's
+    secondary case (one column, one kind: the content gate dominates).
+    """
+    return {"means": "undefined", "when": f"{when}; also {TRAILING_WINDOW}" if trailing else when}
+
+
+def undefinable_trailing(*columns: str) -> dict[str, dict[str, str]]:
+    """``nulls`` entries for grid-reduced columns whose only NaN is the trailing window."""
+    return {c: {"means": "undefinable", "when": TRAILING_WINDOW} for c in columns}
+
+
 def auto_device() -> str:
     """cuda -> mps -> cpu, mirroring the word2psy/viz2psy convention."""
     import torch
@@ -47,6 +69,13 @@ class BaseModel:
     # with learned parameters (e.g. "laion/larger_clap_music_and_speech");
     # None for analytic/DSP models. Recorded per model in the sidecar.
     checkpoint: str | None = None
+    # Contract B §4.1 (schema 1.1): every column this model's code can set to
+    # NaN, keyed by exact column name, with what the null means
+    # (``undefined`` / ``undefinable`` / ``missing``) and when it happens, on
+    # the emitted grid row. ``{}`` is a positive claim that no column can be
+    # null. Written into the sidecar by ``metadata.declared_nulls``; checked
+    # against real output in tests/test_nulls.py.
+    nulls: dict[str, dict[str, str]] = {}
 
     def load(self) -> None:
         """Load weights/resources. Called once before extraction."""

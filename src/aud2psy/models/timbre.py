@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from .base import BaseModel
+from .base import BaseModel, undefinable_trailing
 
 N_FFT = 2048
 HOP_LENGTH = 512
@@ -35,6 +35,9 @@ N_CONTRAST_BANDS = 6  # librosa default -> 7 rows (6 octave sub-bands + top)
 
 class TimbreModel(BaseModel):
     name = "timbre"
+    nulls = undefinable_trailing(*(f"timbre_mfcc_{i:02d}" for i in range(1, 14)),
+                                 *(f"timbre_contrast_{i:02d}" for i in range(1, 8)),
+                                 "timbre_flatness")
     level = "frame"
 
     def extract(self, y: np.ndarray, sr: int, grid) -> dict[str, np.ndarray]:

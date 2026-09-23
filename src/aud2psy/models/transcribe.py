@@ -45,7 +45,7 @@ import re
 import numpy as np
 import pandas as pd
 
-from .base import BaseModel
+from .base import BaseModel, undefined
 
 # §4.1 column convention. Two kinds of column here and the split matters:
 #
@@ -102,6 +102,8 @@ def max_word_run(words) -> int:
 
 class TranscribeModel(BaseModel):
     name = "transcribe"
+    # median_f0 is added to the segments table only when pitch runs alongside
+    nulls = {"median_f0": undefined("every pitch_f0 frame spanning the segment is unvoiced")}
     level = "segment"
 
     def __init__(

@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from .base import BaseModel
+from .base import BaseModel, undefined
 
 WINDOW_SEC = 3.0
 HOP_LENGTH = 512
@@ -42,6 +42,9 @@ def _key_profiles() -> np.ndarray:
 
 class TonalModel(BaseModel):
     name = "tonal"
+    nulls = {c: undefined("every chroma frame in the grid window is silent (smoothed chroma energy < 1e-6)",
+                          trailing=True)
+             for c in ("tonal_key_clarity", "tonal_majorness", "tonal_chroma_entropy")}
     level = "frame"
 
     def extract(self, y: np.ndarray, sr: int, grid) -> dict[str, np.ndarray]:

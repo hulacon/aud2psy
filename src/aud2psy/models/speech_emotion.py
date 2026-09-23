@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from .base import BaseModel, auto_device
+from .base import BaseModel, auto_device, undefined
 
 CHECKPOINT = "audeering/wav2vec2-large-robust-12-ft-emotion-msp-dim"
 WINDOW_SEC = 4.0
@@ -70,6 +70,9 @@ def _build_model_class():
 
 class SpeechEmotionModel(BaseModel):
     name = "speech_emotion"
+    nulls = {f"speech_emotion_{d}": undefined(
+        "mean Silero speech probability over the context window below GATE_MIN_SPEECH (0.25)")
+        for d in ("arousal", "dominance", "valence")}
     level = "frame"
     input_sr = 16000  # the model's native rate; also what Silero VAD wants
     window_sec = WINDOW_SEC

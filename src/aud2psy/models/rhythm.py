@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from .base import BaseModel
+from .base import BaseModel, undefinable_trailing
 
 HOP_LENGTH = 512
 WINDOW_SEC = 3.0
@@ -47,6 +47,7 @@ def _checkerboard(half: int) -> np.ndarray:
 
 class RhythmModel(BaseModel):
     name = "rhythm"
+    nulls = undefinable_trailing("rhythm_pulse_clarity", "rhythm_beat_strength", "rhythm_novelty")
     level = "frame"
 
     def extract(self, y: np.ndarray, sr: int, grid) -> dict[str, np.ndarray]:

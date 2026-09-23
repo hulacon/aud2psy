@@ -31,7 +31,7 @@ import numpy as np
 import pandas as pd
 
 from ..exceptions import Aud2PsyError
-from .base import BaseModel
+from .base import BaseModel, undefined
 
 FINE_DT = 0.01  # seconds; activity sampling resolution
 MIN_PAUSE_SEC = 0.15  # below: articulatory gap, not a pause
@@ -42,6 +42,7 @@ REQUIRED_WORD_COLUMNS = ["word", "onset", "offset"]
 
 class SpeechRateModel(BaseModel):
     name = "speech_rate"
+    nulls = {"speech_rate_word_duration": undefined("no transcribed word is active in the grid window")}
     level = "frame"
     checkpoint = None  # analytic — provenance lives with transcribe's checkpoint
 

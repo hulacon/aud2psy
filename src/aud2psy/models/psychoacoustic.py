@@ -54,7 +54,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from .base import BaseModel
+from .base import BaseModel, undefined, undefinable_trailing
 
 FULL_SCALE_DB_SPL = 94.0  # digital RMS 1.0 -> 1 Pa; arbitrary reference
 FIELD_TYPE = "free"
@@ -112,6 +112,13 @@ def fluctuation_estimate(
 
 class PsychoacousticModel(BaseModel):
     name = "psychoacoustic"
+    nulls = {
+        "psychoacoustic_sharpness": undefined(
+            "window mean Zwicker loudness below SHARPNESS_MIN_SONE (0.25 sone)"),
+        # 200 ms roughness frames at a 100 ms step leave a trailing window empty
+        # far more often than librosa's 23 ms frames do
+        **undefinable_trailing("psychoacoustic_roughness"),
+    }
     level = "frame"
     input_sr = 48000
 

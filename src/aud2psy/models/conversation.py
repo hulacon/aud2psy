@@ -35,7 +35,7 @@ import numpy as np
 import pandas as pd
 
 from ..exceptions import Aud2PsyError
-from .base import BaseModel
+from .base import BaseModel, undefined
 
 FINE_DT = 0.01  # seconds; activity sampling resolution
 
@@ -44,6 +44,7 @@ REQUIRED_TURN_COLUMNS = ["speaker", "onset", "offset"]
 
 class ConversationModel(BaseModel):
     name = "conversation"
+    nulls = {"conversation_turn_duration": undefined("no diarized speaker is active in the grid window")}
     level = "frame"
     checkpoint = None  # analytic — provenance lives with diarize's checkpoint
 
