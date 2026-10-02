@@ -446,14 +446,18 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("speech_rate derives from the transcribe word timestamps; "
                      "add the transcribe model, or pass --words "
                      "existing_transcript_words.csv")
-    if args.words and len(input_paths) > 1:
-        parser.error("--words maps one word table onto one input; with several "
-                     "inputs run speech_rate together with transcribe instead")
+    # A manifest always takes the batch path: its rows carry per-file `output`
+    # and `stimulus_id`, and a one-row manifest is still a manifest (routing it
+    # to the single-input path read -o as a file stem and ignored both).
+    batched = batch_rows is not None or len(input_paths) > 1
+    if args.words and batched:
+        parser.error("--words maps one word table onto one input; with a manifest or "
+                     "several inputs run speech_rate together with transcribe instead")
 
     from .exceptions import Aud2PsyError
     from .pipeline import save_result, score_audio, score_audio_batch
 
-    if len(input_paths) > 1:
+    if batched:
         from pathlib import Path
 
         if not args.output:

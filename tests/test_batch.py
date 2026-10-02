@@ -172,3 +172,50 @@ def test_cli_batch_manifest_output_cannot_escape(clips, tmp_path, bad):
         w.writerow({"path": str(clips[1]), "output": "ok.csv"})
     with pytest.raises(SystemExit):
         main(["loudness", "--inputs-from", str(man), "-o", str(tmp_path / "out")])
+
+
+def _one_row_manifest(tmp_path, path, output, stimulus_id="w0"):
+    import csv
+
+    man = tmp_path / "one.csv"
+    with open(man, "w", newline="") as f:
+        w = csv.DictWriter(f, ["path", "stimulus_id", "output"])
+        w.writeheader()
+        w.writerow({"path": str(path), "stimulus_id": stimulus_id, "output": output})
+    return man
+
+
+def test_cli_one_row_manifest_is_still_a_manifest(clips, tmp_path):
+    """A one-row manifest once fell through to the single-input path: -o was read
+    as a file stem (out_frames.csv beside it) and the row's output and stimulus_id
+    were ignored. A campaign narrowed to one unit hit exactly that."""
+    import csv
+
+    from aud2psy.cli import main
+
+    man = _one_row_manifest(tmp_path, clips[0], "voice/w0.csv")
+    out = tmp_path / "out"
+    assert main(["loudness", "--inputs-from", str(man), "-o", str(out)]) == 0
+    rows = list(csv.DictReader(open(out / "voice" / "w0_frames.csv")))
+    assert rows and {r["stimulus_id"] for r in rows} == {"w0"}
+    assert (out / "voice" / "w0.meta.json").exists()
+    assert not (tmp_path / "out_frames.csv").exists()
+
+
+def test_cli_one_row_manifest_output_cannot_escape(clips, tmp_path):
+    from aud2psy.cli import main
+
+    man = _one_row_manifest(tmp_path, clips[0], "../escape.csv")
+    with pytest.raises(SystemExit):
+        main(["loudness", "--inputs-from", str(man), "-o", str(tmp_path / "out")])
+
+
+def test_cli_manifest_refuses_words(clips, tmp_path):
+    """--words maps one table onto one input; the batch path has no slot for it."""
+    from aud2psy.cli import main
+
+    man = _one_row_manifest(tmp_path, clips[0], "w0.csv")
+    words = tmp_path / "words.csv"
+    words.write_text("onset,offset,word\n0.0,0.1,a\n")
+    with pytest.raises(SystemExit):
+        main(["speech_rate", "--inputs-from", str(man), "--words", str(words), "-o", str(tmp_path / "out")])

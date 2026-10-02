@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.18.1] - 2026-10-02
+
+### Fixed
+
+- **A one-row `--inputs-from` manifest is batched like any other.** It was
+  routed to the single-input path, which read `-o DIR` as a file stem
+  (writing `DIR_frames.csv` beside it) and ignored the row's `output` and
+  `stimulus_id`. Any manifest now takes the batch path. A caller narrowing a
+  campaign to one unit hit this, and its per-cell check reported every cell
+  failed. The `output` escape check and the `--words` refusal now apply to a
+  one-row manifest too (`--words` would otherwise have been dropped silently,
+  since the batch path has no slot for it).
+
 ## [0.18.0] - 2026-09-23
 
 ### Added
