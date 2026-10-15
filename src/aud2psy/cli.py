@@ -413,6 +413,13 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
             models.remove("egemaps")
+        if importlib.util.find_spec("ebind") is None:
+            print(
+                "note: skipping ebind_audio (optional dependency not installed; "
+                'pip install "aud2psy[ebind]")',
+                file=sys.stderr,
+            )
+            models.remove("ebind_audio")
     if not models:
         parser.error("no models requested; name models before the input file or use --all")
     unknown = [m for m in models if m not in MODEL_REGISTRY]
@@ -446,6 +453,9 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("speech_rate derives from the transcribe word timestamps; "
                      "add the transcribe model, or pass --words "
                      "existing_transcript_words.csv")
+    if not args.output and all(m in ("beats", "diarize") for m in models):
+        parser.error("beats/diarize write event tables only; give -o to save them "
+                     "(stdout takes the frames or transcript table)")
     # A manifest always takes the batch path: its rows carry per-file `output`
     # and `stimulus_id`, and a one-row manifest is still a manifest (routing it
     # to the single-input path read -o as a file stem and ignored both).
@@ -465,6 +475,26 @@ def main(argv: list[str] | None = None) -> int:
         out_dir = Path(args.output)
         if out_dir.suffix:
             parser.error(f"-o must be a DIRECTORY when batching, got {args.output!r}")
+        # Resolve every output stem BEFORE scoring: a bad or colliding stem
+        # should cost nothing, and two inputs sharing a file name (a/clip.wav,
+        # b/clip.wav) otherwise overwrote each other's files silently.
+        stems: list[str] = []
+        claimed: dict[Path, int] = {}
+        for i, src_path in enumerate(input_paths):
+            row = batch_rows[i] if batch_rows else {}
+            stem = row.get("output") or f"{Path(src_path).stem}.csv"
+            # `output` may nest (one subdirectory per condition is normal), but
+            # it is a path from a file, so it must not escape the output dir.
+            if Path(stem).is_absolute() or ".." in Path(stem).parts:
+                parser.error(f"--inputs-from row {i}: `output` must be a relative "
+                             f"path inside -o, got {stem!r}")
+            key = Path(stem).with_suffix("")  # save_result writes {stem}_*.csv
+            if key in claimed:
+                parser.error(f"inputs {claimed[key]} and {i} would both write "
+                             f"{key}_* in {out_dir}; give each a distinct `output` "
+                             "via --inputs-from")
+            claimed[key] = i
+            stems.append(stem)
         out_dir.mkdir(parents=True, exist_ok=True)
         try:
             results = score_audio_batch(
@@ -483,14 +513,8 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         for i, (res, src_path) in enumerate(zip(results, input_paths)):
             row = batch_rows[i] if batch_rows else {}
-            stem = row.get("output") or f"{Path(src_path).stem}.csv"
-            # `output` may nest (one subdirectory per condition is normal), but
-            # it is a path from a file, so it must not escape the output dir.
-            if Path(stem).is_absolute() or ".." in Path(stem).parts:
-                parser.error(f"--inputs-from row {i}: `output` must be a relative "
-                             f"path inside -o, got {stem!r}")
             sid = row.get("stimulus_id") or args.stimulus_id
-            written = save_result(res, out_dir / stem, stimulus_id=sid)
+            written = save_result(res, out_dir / stems[i], stimulus_id=sid)
             print(f"{Path(src_path).name}: {written['meta']}")
         print(f"batched {len(results)} inputs through {len(models)} model(s), "
               f"each model loaded once")
@@ -522,7 +546,9 @@ def main(argv: list[str] | None = None) -> int:
             print("note: no speech detected (transcript has 0 rows)")
     else:
         df = result.frames_df if result.frames_df is not None else result.transcript_df
-        df.to_csv(sys.stdout, index=False, float_format="%.6g")
+        from .pipeline import full_precision_coordinates
+
+        full_precision_coordinates(df).to_csv(sys.stdout, index=False, float_format="%.6g")
     return 0
 
 

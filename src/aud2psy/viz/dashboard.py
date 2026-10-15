@@ -110,7 +110,8 @@ def _projection_payload(
         X_proj, info = compute_projection(
             X[valid], method=method, n_components=n_components
         )
-    except Exception as e:  # pragma: no cover - degenerate inputs
+    except (ValueError, np.linalg.LinAlgError) as e:  # degenerate inputs only;
+        # anything else (e.g. an sklearn API TypeError) is a bug, not a skip
         warnings.warn(f"{method} projection failed: {e}")
         return None
 

@@ -29,6 +29,15 @@ class Grid:
         """Window-center times — the ``time`` column of the frames CSV."""
         return (np.arange(self.n_windows) + 0.5) * self.hop
 
+    def _index(self, times: np.ndarray) -> np.ndarray:
+        """Window index of each time, clipped to the grid.
+
+        The quotient is rounded before flooring (the ``for_duration`` guard):
+        0.3 / 0.1 is 2.9999999999999996, and truncating it filed a time on a
+        window edge into the previous window for any non-power-of-two hop.
+        """
+        return np.clip(np.floor(np.round(times / self.hop, 9)).astype(int), 0, self.n_windows - 1)
+
     def average(self, times: np.ndarray, values: np.ndarray) -> np.ndarray:
         """NaN-aware mean of native-resolution ``values`` in each grid window.
 
@@ -40,7 +49,7 @@ class Grid:
         values = np.asarray(values, dtype=float)
         if times.shape != values.shape:
             raise ValueError(f"times {times.shape} and values {values.shape} differ")
-        idx = np.clip((times / self.hop).astype(int), 0, self.n_windows - 1)
+        idx = self._index(times)
         valid = ~np.isnan(values)
         sums = np.bincount(idx[valid], weights=values[valid], minlength=self.n_windows)
         counts = np.bincount(idx[valid], minlength=self.n_windows)
@@ -56,7 +65,7 @@ class Grid:
         """
         times = np.asarray(times, dtype=float)
         values = np.asarray(values, dtype=float)
-        idx = np.clip((times / self.hop).astype(int), 0, self.n_windows - 1)
+        idx = self._index(times)
         valid = ~np.isnan(values)
         out = np.full(self.n_windows, -np.inf)
         np.maximum.at(out, idx[valid], values[valid])
@@ -68,5 +77,5 @@ class Grid:
         event_times = np.asarray(event_times, dtype=float)
         if event_times.size == 0:
             return np.zeros(self.n_windows)
-        idx = np.clip((event_times / self.hop).astype(int), 0, self.n_windows - 1)
+        idx = self._index(event_times)
         return np.bincount(idx, minlength=self.n_windows) / self.hop

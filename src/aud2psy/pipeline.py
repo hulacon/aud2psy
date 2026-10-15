@@ -656,6 +656,25 @@ def score_audio_batch(
     return results
 
 
+COORDINATE_COLUMNS = ("time", "onset", "offset")
+
+
+def full_precision_coordinates(df: pd.DataFrame) -> pd.DataFrame:
+    """Pre-format the time-coordinate columns so ``float_format="%.6g"``
+    (meant for feature values) cannot truncate them: 6 significant digits
+    turned 1000.125 into 1000.12 at --hop 0.25, and 10000.25 into 10000.2 at
+    the default hop. Feature columns are left to the caller's float_format.
+    """
+    cols = [c for c in COORDINATE_COLUMNS
+            if c in df.columns and pd.api.types.is_float_dtype(df[c])]
+    if not cols:
+        return df
+    df = df.copy()
+    for c in cols:
+        df[c] = ["" if np.isnan(v) else f"{v:.10g}" for v in df[c]]
+    return df
+
+
 def save_result(
     result: ScoreResult,
     out_path: str | Path,
@@ -684,6 +703,7 @@ def save_result(
         if stimulus_id is not None and "stimulus_id" not in df.columns:
             df = df.copy()
             df.insert(0, "stimulus_id", stimulus_id)
+        df = full_precision_coordinates(df)
         df.to_csv(path, index=False, float_format="%.6g")
 
     written: dict[str, Path] = {}
