@@ -30,10 +30,11 @@ column is renamed.
 - **A time exactly on a window edge goes to the correct window at non-default
   hops.** `Grid.average`/`window_max`/`rate` truncated `time / hop`, and
   `0.3 / 0.1 == 2.9999999999999996`, so an edge time landed one window early
-  for any hop that is not a power of two (0.1, 0.2, 0.25 ...). This hit
+  at hops that are not a power of two (0.1, 0.2, 0.3 ...). This hit
   round-valued word and turn onsets in `speech_rate` and `conversation`. The
-  0.5 s default is unaffected (division by 0.5 is exact). **Changes output
-  values** for edge times at those hops.
+  0.5 s default and other power-of-two hops (0.25, 0.125 ...) are unaffected:
+  division by them is exact. **Changes output values** only for edge times at
+  non-power-of-two hops.
 
 ### Fixed
 
