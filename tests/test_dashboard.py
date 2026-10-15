@@ -224,3 +224,25 @@ class TestResolveScoresPaths:
 
     def test_missing(self, tmp_path):
         assert resolve_scores_paths(tmp_path / "nope.csv") == (None, None, None)
+
+
+class TestProjectionFailuresSurface:
+    def test_clap_gets_mds_clustering(self):
+        """A healthy embedding table must produce the MDS views, not silently
+        skip them (sklearn < 1.8 rejected MDS(metric_mds=...) and the broad
+        except turned that into a warning plus a missing view)."""
+        from aud2psy.viz.dashboard import _build_model_entry
+
+        entry = _build_model_entry(_make_frames_df(), "clap", mds_max=500)
+        assert entry["clustering"]["2d"]["method"] == "mds"
+        assert entry["clustering"]["3d"]["method"] == "mds"
+
+    def test_code_error_in_projection_is_not_swallowed(self, monkeypatch):
+        from aud2psy.viz import dashboard
+
+        def broken(*args, **kwargs):
+            raise TypeError("MDS.__init__() got an unexpected keyword argument")
+
+        monkeypatch.setattr(dashboard, "compute_projection", broken)
+        with pytest.raises(TypeError):
+            create_dashboard(_make_frames_df(), None)

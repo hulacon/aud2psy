@@ -68,3 +68,21 @@ def test_window_max():
     assert out[0] == 3.0
     assert np.isnan(out[1])  # only a NaN native frame -> empty window
     assert out[2] == 7.0
+
+
+def test_window_edge_times_land_in_the_window_they_open():
+    """Window k is [k*hop, (k+1)*hop): an event at exactly k*hop belongs to k.
+
+    0.3 / 0.1 == 2.9999999999999996 in floating point, so truncating the
+    quotient filed edge events one window early for any hop that is not a
+    power of two (--hop 0.1, 0.2, 0.25 ... but not the 0.5 default).
+    Whisper/pyannote timestamps sit on round values, so this hits word and
+    turn onsets in speech_rate / conversation, not just contrived inputs.
+    """
+    grid = Grid(hop=0.1, n_windows=10)
+    edges = np.array([0.3, 0.6, 0.7])
+    np.testing.assert_array_equal(np.flatnonzero(grid.rate(edges)), [3, 6, 7])
+    out = grid.average(edges, np.ones(3))
+    np.testing.assert_array_equal(np.flatnonzero(~np.isnan(out)), [3, 6, 7])
+    out = grid.window_max(edges, np.ones(3))
+    np.testing.assert_array_equal(np.flatnonzero(~np.isnan(out)), [3, 6, 7])

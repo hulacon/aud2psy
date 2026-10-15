@@ -219,3 +219,31 @@ def test_cli_manifest_refuses_words(clips, tmp_path):
     words.write_text("onset,offset,word\n0.0,0.1,a\n")
     with pytest.raises(SystemExit):
         main(["speech_rate", "--inputs-from", str(man), "--words", str(words), "-o", str(tmp_path / "out")])
+
+
+def test_cli_batch_refuses_colliding_output_stems(tmp_path):
+    """Two inputs with the same file name in different directories map to
+    the same default output stem; the second used to overwrite the first's
+    files silently. Refuse before scoring anything."""
+    from aud2psy.cli import main
+
+    paths = []
+    for d, y in (("a", sine(220, 1.0)), ("b", sine(880, 1.0))):
+        (tmp_path / d).mkdir()
+        p = tmp_path / d / "clip.wav"
+        sf.write(p, y, SR)
+        paths.append(str(p))
+    out = tmp_path / "out"
+    with pytest.raises(SystemExit):
+        main(["loudness", *paths, "-o", str(out)])
+    assert not (out / "clip_frames.csv").exists()
+
+
+def test_cli_batch_manifest_refuses_duplicate_outputs(clips, tmp_path):
+    from aud2psy.cli import main
+
+    manifest = tmp_path / "m.csv"
+    manifest.write_text("path,output\n"
+                        f"{clips[0]},same.csv\n{clips[1]},./same.csv\n")
+    with pytest.raises(SystemExit):
+        main(["loudness", "--inputs-from", str(manifest), "-o", str(tmp_path / "out")])

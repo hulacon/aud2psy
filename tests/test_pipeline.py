@@ -209,3 +209,73 @@ def test_annotate_voice_gender():
     assert transcript["median_f0"][0] == 115
     assert transcript["median_f0"][1] == 205
     assert np.isnan(transcript["median_f0"][2])
+
+
+def test_saved_time_columns_keep_full_precision(tmp_path):
+    """%.6g on the coordinate columns truncated times past 6 significant
+    digits: at --hop 0.25 every center after 1000 s (1000.125 -> 1000.12),
+    and at the 0.5 s default every center after 10000 s."""
+    from aud2psy.grid import Grid
+
+    centers = Grid(hop=0.25, n_windows=4100).centers
+    frames = pd.DataFrame({"time": centers, "loudness_rms": np.full(len(centers), 0.1)})
+    words = pd.DataFrame({"word": ["a", "b"], "onset": [10000.25, 1234.125],
+                          "offset": [10000.75, 1234.375]})
+    result = pipeline.ScoreResult(frames_df=frames, transcript_df=None, words_df=words,
+                                  meta={"input": {"path": "x.wav"}})
+    written = save_result(result, tmp_path / "s.csv")
+    back = pd.read_csv(written["frames"])
+    assert back["time"].is_unique
+    np.testing.assert_allclose(back["time"], centers, rtol=0, atol=1e-9)
+    back_words = pd.read_csv(written["transcript_words"])
+    np.testing.assert_allclose(back_words["onset"], words["onset"], rtol=0, atol=1e-9)
+    np.testing.assert_allclose(back_words["offset"], words["offset"], rtol=0, atol=1e-9)
+
+
+def test_cli_stdout_keeps_time_precision(wav_factory, capsys, monkeypatch):
+    from aud2psy.grid import Grid
+
+    centers = Grid(hop=0.25, n_windows=4100).centers
+    frames = pd.DataFrame({"time": centers, "loudness_rms": np.zeros(len(centers))})
+    monkeypatch.setattr(pipeline, "score_audio", lambda *a, **k: pipeline.ScoreResult(
+        frames_df=frames, transcript_df=None, words_df=None))
+    path = wav_factory(sine(220, 0.5))
+    assert main(["loudness", str(path)]) == 0
+    from io import StringIO
+
+    back = pd.read_csv(StringIO(capsys.readouterr().out))
+    np.testing.assert_allclose(back["time"], centers, rtol=0, atol=1e-9)
+
+
+def test_cli_all_skips_ebind_without_the_extra(wav_factory, monkeypatch, capsys):
+    """--all must not schedule ebind_audio when the [ebind] extra is absent:
+    it is the 11th model, so the run crashed with ModuleNotFoundError after
+    the earlier models (CLAP included) had already run, writing nothing."""
+    import importlib.util
+
+    real_find_spec = importlib.util.find_spec
+    monkeypatch.setattr(importlib.util, "find_spec",
+                        lambda name, *a: None if name == "ebind" else real_find_spec(name, *a))
+    seen = {}
+
+    def fake_score(path, models, **kwargs):
+        seen["models"] = list(models)
+        return pipeline.ScoreResult(frames_df=pd.DataFrame({"time": [0.25]}),
+                                    transcript_df=None, words_df=None)
+
+    monkeypatch.setattr(pipeline, "score_audio", fake_score)
+    path = wav_factory(sine(220, 0.5))
+    assert main(["--all", str(path)]) == 0
+    assert "ebind_audio" not in seen["models"]
+    assert "skipping ebind_audio" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("model", ["beats", "diarize"])
+def test_cli_stdout_refuses_event_only_models(wav_factory, model):
+    """Without -o the CLI prints the frames (else transcript) table; an
+    events-only request has neither, and used to die on None.to_csv after
+    the model had run. Refuse before scoring."""
+    path = wav_factory(sine(220, 0.5))
+    with mock.patch.object(pipeline, "score_audio") as score, pytest.raises(SystemExit):
+        main([model, str(path)])
+    score.assert_not_called()
