@@ -15,7 +15,7 @@ pip install "aud2psy @ git+https://github.com/hulacon/aud2psy"
 # or: git clone https://github.com/hulacon/aud2psy && cd aud2psy && pip install -e .
 ```
 
-Requires Python 3.10–3.12 and the `ffmpeg` binary on PATH (for video input
+Requires Python 3.11–3.12 and the `ffmpeg` binary on PATH (for video input
 and non-wav audio). Whisper weights download from HuggingFace on first use
 of `transcribe` (the `speech` VAD model needs no Whisper weights).
 
