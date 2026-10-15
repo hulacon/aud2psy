@@ -11,3 +11,4 @@ dist/
 # Local sandbox data (viz2psy convention); anchored so it can't swallow
 # src/aud2psy/data/ (the shipped music_emotion probe)
 /data/
+.coverage
