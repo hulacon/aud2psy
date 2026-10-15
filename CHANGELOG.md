@@ -7,6 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-10-15
+
+Minor release: several fixes below change written output values, though no
+column is renamed.
+
+### Changed
+
+- **Python floor raised to 3.11; `scikit-learn>=1.8` declared.** The
+  dashboard's MDS projection uses the scikit-learn 1.8 API
+  (`MDS(metric_mds=...)`), and scikit-learn 1.8 requires Python 3.11. A 3.10
+  install resolved scikit-learn 1.7, where that call is a `TypeError`.
+  scikit-learn was already imported directly but only arrived transitively via
+  librosa. It is now a declared dependency. CI runs 3.11 and 3.12.
+- **CSV `time`/`onset`/`offset` columns keep up to 10 significant digits**
+  (previously 6, the `%.6g` used for feature values). Before, at `--hop 0.25`
+  every frame time past 1000 s was rounded to 10 ms (1000.125 → 1000.12), and
+  at the default hop every time past 10 000 s lost precision; word onsets did
+  too. Applies to every saved table and to the stdout frames CSV. Feature
+  columns keep `%.6g`. **Changes output values** wherever a coordinate needed
+  more than 6 significant digits.
+- **A time exactly on a window edge goes to the correct window at non-default
+  hops.** `Grid.average`/`window_max`/`rate` truncated `time / hop`, and
+  `0.3 / 0.1 == 2.9999999999999996`, so an edge time landed one window early
+  for any hop that is not a power of two (0.1, 0.2, 0.25 ...). This hit
+  round-valued word and turn onsets in `speech_rate` and `conversation`. The
+  0.5 s default is unaffected (division by 0.5 is exact). **Changes output
+  values** for edge times at those hops.
+
+### Fixed
+
+- **`--all` succeeds without the `[ebind]` extra.** It scheduled `ebind_audio`
+  unconditionally, so a default install crashed with `ModuleNotFoundError`
+  after the earlier models (CLAP included) had already run, writing nothing.
+  It is now skipped with a note, like `beats`/`diarize`/`egemaps`; the output
+  has no `ebind_*` columns.
+- **Batch inputs that would overwrite each other are refused up front.** Two
+  inputs sharing a file name (`a/clip.wav`, `b/clip.wav`), or manifest
+  `output` values that normalize to the same stem, made the second write over
+  the first. Stems are now checked before any scoring. The existing
+  `output`-escape check moved ahead of scoring too.
+- **`beats` or `diarize` without `-o` is refused up front.** The stdout path
+  prints the frames or transcript table; an events-only run has neither, and
+  crashed on `None.to_csv` after the model had run.
+- **Dashboard projection failures are no longer swallowed.** A broad
+  `except Exception` turned any error in a projection (such as the
+  scikit-learn 1.7 `TypeError` above) into a warning and a silently missing
+  clustering view. Only degenerate-input errors (`ValueError`, `LinAlgError`)
+  now skip a view.
+
 ## [0.18.1] - 2026-10-02
 
 ### Fixed
