@@ -8,7 +8,7 @@ version = "0.18.1"
 description = "Extract psychological and acoustic features from audio (and the audio stream of video), including time-stamped transcription"
 readme = "README.md"
 license = "MIT"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 authors = [
     {name = "Ben Hutchinson", email = "bhutch@uoregon.edu"},
 ]
@@ -26,7 +26,6 @@ classifiers = [
     "Intended Audience :: Science/Research",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
@@ -36,6 +35,9 @@ dependencies = [
     "numpy>=1.24",
     "pandas>=1.5",
     "librosa>=0.10",
+    # used directly by viz/projection.py (MDS `metric_mds=` is the 1.8+ API);
+    # arrives via librosa anyway, declared here for the floor
+    "scikit-learn>=1.8",
     "soundfile>=0.12",
     "faster-whisper>=1.0",
     "tqdm>=4.60",
