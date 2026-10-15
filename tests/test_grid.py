@@ -75,7 +75,7 @@ def test_window_edge_times_land_in_the_window_they_open():
 
     0.3 / 0.1 == 2.9999999999999996 in floating point, so truncating the
     quotient filed edge events one window early for any hop that is not a
-    power of two (--hop 0.1, 0.2, 0.25 ... but not the 0.5 default).
+    power of two (--hop 0.1, 0.2, 0.3 ...; 0.5 and 0.25 divide exactly).
     Whisper/pyannote timestamps sit on round values, so this hits word and
     turn onsets in speech_rate / conversation, not just contrived inputs.
     """
