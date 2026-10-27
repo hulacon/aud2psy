@@ -54,13 +54,13 @@ dependencies = [
 # opensmile in dev so the egemaps tests run in CI (offline, no weights)
 dev = ["pytest", "ipython", "opensmile>=2.5"]
 # beat_this is not on PyPI; the git reference keeps this an opt-in extra
-beats = ["beat_this @ git+https://github.com/CPJKU/beat_this"]
+beats = ["beat_this @ git+https://github.com/CPJKU/beat_this@b95c8ab0c58c2d9fcfd40508ae8dffbc05ac4f5c"]
 # gated weights (one-time HF license acceptance + token) keep this opt-in too
 diarize = ["pyannote.audio>=4.0"]
 # openSMILE binaries are audEERING research-license (non-commercial) — opt-in
 egemaps = ["opensmile>=2.5"]
 # ebind is not on PyPI; its weights are CC-BY-NC-SA 4.0 (non-commercial) — opt-in
-ebind = ["ebind @ git+https://github.com/encord-team/ebind"]
+ebind = ["ebind @ git+https://github.com/encord-team/ebind@7909701e9372353ca678b9515f9f61cf87c83c71"]
 
 [project.scripts]
 aud2psy = "aud2psy.cli:main"
