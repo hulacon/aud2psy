@@ -10,6 +10,7 @@ import pytest
 
 from aud2psy.grid import Grid
 from aud2psy.models.ebind_audio import (
+    DEFAULT_REVISION,
     EMBED_DIM,
     WINDOW_SEC,
     EBindAudioModel,
@@ -54,3 +55,10 @@ def test_real_embeddings_unit_norm():
     out = model.embed_windows(y, SR, CENTERS)
     assert out.shape == (3, EMBED_DIM)
     np.testing.assert_allclose(np.linalg.norm(out, axis=1), 1.0, atol=1e-3)
+
+
+def test_default_checkpoint_loads_the_pinned_revision():
+    """The *2psy repos share one embedding space only while they load the same
+    snapshot of the checkpoint. A floating ``main`` would split it silently."""
+    assert EBindAudioModel(device="cpu").revision == DEFAULT_REVISION
+    assert EBindAudioModel(checkpoint="someone/other-ebind", device="cpu").revision == "main"
