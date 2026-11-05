@@ -46,6 +46,22 @@ class TonalModel(BaseModel):
                           trailing=True)
              for c in ("tonal_key_clarity", "tonal_majorness", "tonal_chroma_entropy")}
     level = "frame"
+    labels = {
+        "default": {"interpretability": "nameable", "derivation": "formula"},
+        "columns": {
+            "tonal_key_clarity": {
+                "LongName": "Key clarity",
+                "Description": "Best correlation of the 3 s chroma distribution with the 24 "
+                               "Krumhansl-Kessler key profiles"},
+            "tonal_majorness": {
+                "LongName": "Mode (majorness)",
+                "Description": "Best major-key minus best minor-key profile correlation "
+                               "(positive = major-leaning)"},
+            "tonal_chroma_entropy": {
+                "LongName": "Chroma entropy",
+                "Description": "Normalised entropy of the pitch-class distribution, in [0, 1]"},
+        },
+    }
 
     def extract(self, y: np.ndarray, sr: int, grid) -> dict[str, np.ndarray]:
         import librosa

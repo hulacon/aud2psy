@@ -49,6 +49,22 @@ class RhythmModel(BaseModel):
     name = "rhythm"
     nulls = undefinable_trailing("rhythm_pulse_clarity", "rhythm_beat_strength", "rhythm_novelty")
     level = "frame"
+    labels = {
+        "default": {"interpretability": "nameable", "derivation": "formula"},
+        "columns": {
+            "rhythm_pulse_clarity": {
+                "LongName": "Pulse clarity",
+                "Description": "Salience of the strongest beat-range periodicity (30-240 BPM) in "
+                               "the mean-removed onset envelope's autocorrelation, 3 s window"},
+            "rhythm_beat_strength": {
+                "LongName": "Beat strength",
+                "Description": "Window maximum of the predominant-local-pulse curve"},
+            "rhythm_novelty": {
+                "LongName": "Structural novelty",
+                "Description": "Foote checkerboard novelty on an MFCC self-similarity matrix "
+                               "(texture change)"},
+        },
+    }
 
     def extract(self, y: np.ndarray, sr: int, grid) -> dict[str, np.ndarray]:
         import librosa

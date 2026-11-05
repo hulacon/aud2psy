@@ -1,9 +1,11 @@
-"""`aud2psy sidecar refresh`: bring existing sidecars up to schema 1.1.
+"""`aud2psy sidecar refresh`: bring existing sidecars up to the current schema (1.2).
 
 Contract B 1.1 adds a `nulls` map to every model entry (what a NaN in each
-column means). Feature values do not change between 1.0 and 1.1, so an old
-family is brought forward by rewriting its `.meta.json` only; a CSV is never
-written.
+column means), and 1.2 adds `labels` (what each column is and how its value
+is computed). Feature values do not change between 1.0, 1.1 and 1.2, so an
+old family is brought forward by rewriting its `.meta.json` only; a CSV is
+never written. Both maps are re-stamped from the model classes, so a refresh
+also carries a label-only patch release onto existing sidecars.
 
 A refreshed sidecar is checked against the tables it describes: each model's
 own columns are read from the family's `output` tables, and a column holding
@@ -22,7 +24,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .exceptions import Aud2PsyError
-from .metadata import SCHEMA_VERSION, stamp_nulls
+from .metadata import SCHEMA_VERSION, stamp_labels, stamp_nulls
 
 
 @dataclass
@@ -84,6 +86,7 @@ def refresh_sidecar(path: str | Path, *, dry_run: bool = False) -> RefreshResult
         return RefreshResult(path, "skipped", note=f"extractor {meta.get('extractor')!r}")
     new = copy.deepcopy(meta)
     stamp_nulls(new["models"])
+    stamp_labels(new["models"])
     undeclared = {
         name: sorted(cols - set(new["models"][name]["nulls"]))
         for name, cols in _nan_columns(path, new).items()
@@ -100,7 +103,7 @@ def refresh_sidecar(path: str | Path, *, dry_run: bool = False) -> RefreshResult
     new.setdefault("refreshed", []).append({
         "by": f"aud2psy {__version__}",
         "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "fields": ["schema_version", "models.*.nulls"],
+        "fields": ["schema_version", "models.*.nulls", "models.*.labels"],
         "from_schema_version": meta.get("schema_version"),
     })
     if not dry_run:

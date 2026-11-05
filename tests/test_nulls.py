@@ -104,11 +104,11 @@ def test_undefinable_nulls_sit_only_on_the_trailing_row(wav_factory):
     assert not df[undefinable].iloc[:-1].isna().any().any()  # and nothing earlier is positional
 
 
-def test_sidecar_is_1_1_with_every_model_carrying_nulls(wav_factory, tmp_path):
+def test_sidecar_has_every_model_carrying_nulls(wav_factory, tmp_path):
     result = score_audio(wav_factory(sine(220, 2.0)), ["onsets", "pitch"], show_progress=False)
     written = save_result(result, tmp_path / "fam.csv")
     meta = json.loads(written["meta"].read_text())
-    assert meta["schema_version"] == SCHEMA_VERSION == "1.1"
+    assert meta["schema_version"] == SCHEMA_VERSION
     assert "onsets_rate" not in meta["models"]["onsets"]["nulls"]  # a count: never NaN
     assert set(meta["models"]["pitch"]["nulls"]) == {"pitch_f0", "pitch_voiced_prob"}
     assert stamp_nulls({"clap": {"pattern": "clap_{NNN}"}})["clap"]["nulls"] == {}  # positive "never"
@@ -156,6 +156,7 @@ class TestRefresh:
         meta["schema_version"] = "1.0"
         for entry in meta["models"].values():
             entry.pop("nulls")
+            entry.pop("labels")
         written["meta"].write_text(json.dumps(meta, indent=2))
         return written
 
@@ -164,7 +165,7 @@ class TestRefresh:
         before = w["frames"].read_bytes()
         assert refresh_sidecar(w["meta"]).status == "refreshed"
         meta = json.loads(w["meta"].read_text())
-        assert meta["schema_version"] == "1.1"
+        assert meta["schema_version"] == SCHEMA_VERSION
         assert set(meta["models"]["pitch"]["nulls"]) == {"pitch_f0", "pitch_voiced_prob"}
         assert "onsets_rate" not in meta["models"]["onsets"]["nulls"]
         assert meta["refreshed"][0]["from_schema_version"] == "1.0"

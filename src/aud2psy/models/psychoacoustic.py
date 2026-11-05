@@ -120,6 +120,30 @@ class PsychoacousticModel(BaseModel):
         **undefinable_trailing("psychoacoustic_roughness"),
     }
     level = "frame"
+    labels = {
+        "default": {"interpretability": "nameable", "derivation": "formula"},
+        "columns": {
+            "psychoacoustic_loudness": {
+                "LongName": "Zwicker loudness",
+                "Description": "Time-varying loudness, ISO 532-1 (MoSQITo), free field; absolute "
+                               "values assume digital RMS 1.0 = 94 dB SPL",
+                "Units": "sone"},
+            "psychoacoustic_sharpness": {
+                "LongName": "Sharpness",
+                "Description": "DIN 45692 sharpness from the same specific loudness (MoSQITo)",
+                "Units": "acum"},
+            "psychoacoustic_roughness": {
+                "LongName": "Roughness",
+                "Description": "Daniel & Weber roughness (MoSQITo)",
+                "Units": "asper"},
+            "psychoacoustic_fluctuation": {
+                "LongName": "Fluctuation strength (estimate)",
+                "Description": "Native Fastl-style estimate from specific-loudness envelope "
+                               "modulation, calibrated to 1.0 at Fastl's 4 Hz reference; not a "
+                               "standardised value",
+                "Units": "vacil"},
+        },
+    }
     input_sr = 48000
 
     def extract(self, y: np.ndarray, sr: int, grid) -> dict[str, np.ndarray]:

@@ -24,6 +24,19 @@ class PitchModel(BaseModel):
         **undefinable_trailing("pitch_voiced_prob"),
     }
     level = "frame"
+    labels = {
+        "default": {"interpretability": "nameable", "derivation": "formula"},
+        "columns": {
+            "pitch_f0": {
+                "LongName": "Fundamental frequency",
+                "Description": f"pYIN f0 ({FMIN:g}-{FMAX:g} Hz search range), mean over the "
+                               "window's voiced frames",
+                "Units": "Hz"},
+            "pitch_voiced_prob": {
+                "LongName": "Voicing probability",
+                "Description": "pYIN voicing probability, window mean"},
+        },
+    }
 
     def extract(self, y: np.ndarray, sr: int, grid) -> dict[str, np.ndarray]:
         import librosa

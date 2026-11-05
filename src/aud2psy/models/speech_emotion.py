@@ -83,6 +83,27 @@ class SpeechEmotionModel(SpeechGated, BaseModel):
         f"({GATE_MIN_SPEECH})")
         for d in ("arousal", "dominance", "valence")}
     level = "frame"
+    labels = {
+        "default": {
+            "interpretability": "nameable",
+            "derivation": "trained-on-labels",
+        },
+        "columns": {
+            f"speech_emotion_{d}": {
+                "LongName": f"Vocal {d}",
+                "Description": f"Vocal {d} from audeering wav2vec2 fine-tuned on MSP-Podcast "
+                               "dimensional ratings (4 s context), on the model's native ~0-1 "
+                               "scale",
+                "source_validation": [{
+                    "citation": "https://arxiv.org/abs/2203.07378",
+                    "eval_dataset": "MSP-Podcast (test set)",
+                    "metric": "CCC",
+                    "value": ccc,
+                }],
+            }
+            for d, ccc in (("arousal", 0.745), ("dominance", 0.634), ("valence", 0.638))
+        },
+    }
     input_sr = 16000  # the model's native rate; also what Silero VAD wants
     window_sec = WINDOW_SEC
     checkpoint = CHECKPOINT

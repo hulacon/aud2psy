@@ -309,7 +309,8 @@ def _sidecar_main(argv: list[str]) -> int:
     sub = parser.add_subparsers(dest="sidecar_cmd")
     p_rf = sub.add_parser(
         "refresh",
-        help="Bring sidecars to the current Contract B schema (1.1: per-model `nulls`). "
+        help="Bring sidecars to the current Contract B schema (1.2: per-model `nulls` and "
+             "`labels`). "
              "Rewrites JSON only, never a CSV; refuses a sidecar whose tables hold NaN in "
              "an undeclared column.",
     )

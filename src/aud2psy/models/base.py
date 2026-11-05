@@ -40,6 +40,22 @@ def undefinable_trailing(*columns: str) -> dict[str, dict[str, str]]:
     return {c: {"means": "undefinable", "when": TRAILING_WINDOW} for c in columns}
 
 
+# Contract B §4.1 (schema 1.2) label vocabularies. ``derived_from`` is required
+# exactly for the derivations in NEEDS_DERIVED_FROM, and forbidden otherwise.
+INTERPRETABILITY = ("nameable", "opaque")
+DERIVATIONS = ("formula", "formula-on-model", "trained-on-labels", "probe", "zero-shot",
+               "embedding", "bookkeeping")
+NEEDS_DERIVED_FROM = frozenset({"formula-on-model", "probe", "zero-shot"})
+LABEL_KEYS = frozenset({"interpretability", "derivation", "derived_from", "source_validation",
+                        "LongName", "Description", "Units", "Levels", "TermURL"})
+SOURCE_VALIDATION_KEYS = frozenset({"citation", "eval_dataset", "metric", "value"})
+
+
+def resolve_label(labels: dict, column: str) -> dict:
+    """One column's labels: ``default`` with that column's ``columns`` entry merged key-wise."""
+    return {**labels.get("default", {}), **labels.get("columns", {}).get(column, {})}
+
+
 def auto_device() -> str:
     """cuda -> mps -> cpu, mirroring the word2psy/viz2psy convention."""
     import torch
@@ -76,6 +92,22 @@ class BaseModel:
     # null. Written into the sidecar by ``metadata.declared_nulls``; checked
     # against real output in tests/test_nulls.py.
     nulls: dict[str, dict[str, str]] = {}
+    # Contract B §4.1 (schema 1.2): what each column is and how its value is
+    # computed. ``{"default": {...}, "columns": {"<column>": {...}}}``: the
+    # default applies to every column the model emits, and a ``columns`` entry
+    # replaces individual default keys for that column (key-wise merge). Every
+    # column must resolve to ``interpretability`` and ``derivation``; see the
+    # vocabularies above. Written into the sidecar by ``metadata.stamp_labels``;
+    # checked in tests/test_labels.py. Empty here so a model without labels
+    # fails that test.
+    labels: dict[str, dict] = {}
+    # The registry name of the model whose output this one is computed from,
+    # for a ``formula-on-model`` model that reads another model's table
+    # (conversation <- diarize, speech_rate <- transcribe). When the parent ran
+    # in the same call, ``stamp_labels`` writes the parent's recorded checkpoint
+    # as ``derived_from`` instead of the declared default (e.g. a transcribe
+    # run with a non-default Whisper checkpoint).
+    parent_model: str | None = None
 
     def load(self) -> None:
         """Load weights/resources. Called once before extraction."""

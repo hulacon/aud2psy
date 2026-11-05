@@ -29,11 +29,13 @@ from importlib import resources
 import numpy as np
 
 from .base import undefined
-from .clap import SILENCE_DBFS, ClapModel, silent_windows
+from .clap import DEFAULT_CHECKPOINT, SILENCE_DBFS, ClapModel, silent_windows
 
 PROBE_RESOURCE = "music_emotion_probe.npz"
 PROVENANCE_RESOURCE = "music_emotion_probe.json"
 DIMENSIONS = ["valence", "arousal"]
+PROVENANCE_URL = ("https://github.com/hulacon/aud2psy/blob/main/src/aud2psy/data/"
+                  + PROVENANCE_RESOURCE)
 
 
 def load_probe():
@@ -46,12 +48,48 @@ def load_probe():
     return coef, intercept, provenance
 
 
+def _source_validation(dim: str) -> list[dict]:
+    """Contract B 1.2 ``source_validation`` for one dimension, read from the
+    probe's provenance JSON (the probe is this package's own; its song-level
+    cross-validation is the evaluation its source reports)."""
+    provenance = json.loads(
+        (resources.files("aud2psy") / "data" / PROVENANCE_RESOURCE).read_text())
+    eval_dataset = f"{provenance['dataset']}, {provenance['cv_protocol']}"
+    metrics = {
+        "pooled_r": "Pearson r, out-of-fold predictions pooled over all windows",
+        "rmse": "RMSE, out-of-fold predictions",
+        "mean_song_r": "Pearson r within each song, mean over songs (out-of-fold)",
+    }
+    return [
+        {"citation": PROVENANCE_URL, "eval_dataset": eval_dataset, "metric": label,
+         "value": provenance["cv"][dim][key]}
+        for key, label in metrics.items() if key in provenance["cv"][dim]
+    ]
+
+
 class MusicEmotionModel(ClapModel):
     name = "music_emotion"
     nulls = {f"music_emotion_{d}": undefined(
         "the 10 s CLAP context window is below SILENCE_DBFS (-80 dBFS): digital silence")
         for d in DIMENSIONS}
     level = "frame"
+    labels = {
+        "default": {
+            "interpretability": "nameable",
+            "derivation": "probe",
+            "derived_from": DEFAULT_CHECKPOINT,
+        },
+        "columns": {
+            f"music_emotion_{d}": {
+                "LongName": f"Musical {d}",
+                "Description": f"Musical {d} in [-1, 1] predicted by a ridge probe on CLAP "
+                               "embeddings (10 s context), trained on DEAM dynamic annotations; "
+                               "trained on music and applied to any audio",
+                "source_validation": _source_validation(d),
+            }
+            for d in DIMENSIONS
+        },
+    }
 
     def load(self) -> None:
         super().load()
