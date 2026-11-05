@@ -38,7 +38,8 @@ Minor release. No output values change, so nothing needs re-extracting:
     `trained-on-labels`; the DSP models are `formula`. Row ordinals and
     decoder confidences (`turn_idx`, `chunk_idx`, `word_idx`,
     `transcribe_asr_confidence`, `transcribe_no_speech_prob`,
-    `transcribe_probability`) are `bookkeeping`.
+    `transcribe_probability`) are `bookkeeping` and `opaque` (they describe
+    the extraction, not the stimulus; the family convention).
   - `conversation` and `speech_rate` declare a `parent_model`: when the
     parent ran in the same call, `derived_from` is the checkpoint it recorded
     (e.g. `transcribe --verbatim`), not the default.

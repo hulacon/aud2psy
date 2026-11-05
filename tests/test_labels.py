@@ -150,6 +150,16 @@ def test_derived_from_present_exactly_where_required(model):
             assert "derived_from" not in label, (model, col)
 
 
+@pytest.mark.parametrize("model", sorted(MODEL_REGISTRY))
+def test_bookkeeping_columns_are_opaque(model):
+    """Bookkeeping describes the extraction, not the stimulus (the family convention)."""
+    labels = declared_labels(model)
+    for col in inventory(model):
+        label = resolve_label(labels, col)
+        if label["derivation"] == "bookkeeping":
+            assert label["interpretability"] == "opaque", (model, col)
+
+
 def test_audit_points():
     """The decided per-model labels, spot-checked."""
     from aud2psy.models import clap, diarize, transcribe

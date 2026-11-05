@@ -40,7 +40,8 @@ class DiarizeModel(BaseModel):
     labels = {
         "default": {"interpretability": "nameable", "derivation": "trained-on-labels"},
         "columns": {
-            "turn_idx": {"derivation": "bookkeeping", "Description": "Ordinal of the turn row"},
+            "turn_idx": {"interpretability": "opaque", "derivation": "bookkeeping",
+                         "Description": "Ordinal of the turn row"},
             "speaker": {"Description": "Anonymous speaker label, consistent within one file only"},
             "onset": {"Description": "Turn start", "Units": "s"},
             "offset": {"Description": "Turn end", "Units": "s"},
