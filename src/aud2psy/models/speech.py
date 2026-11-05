@@ -32,6 +32,16 @@ class SpeechModel(BaseModel):
     name = "speech"
     nulls = undefinable_trailing("speech_prob")
     level = "frame"
+    labels = {
+        "default": {
+            "interpretability": "nameable",
+            "derivation": "trained-on-labels",
+            "LongName": "Speech probability",
+            "Description": "Silero VAD speech probability, mean of its 32 ms frames in the grid "
+                           "window",
+        },
+        "columns": {},
+    }
 
     def load(self) -> None:
         from faster_whisper.vad import get_vad_model

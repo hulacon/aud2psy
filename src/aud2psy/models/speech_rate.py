@@ -32,6 +32,7 @@ import pandas as pd
 
 from ..exceptions import Aud2PsyError
 from .base import BaseModel, undefined
+from .transcribe import DEFAULT_WHISPER_MODEL
 
 FINE_DT = 0.01  # seconds; activity sampling resolution
 MIN_PAUSE_SEC = 0.15  # below: articulatory gap, not a pause
@@ -44,6 +45,24 @@ class SpeechRateModel(BaseModel):
     name = "speech_rate"
     nulls = {"speech_rate_word_duration": undefined("no transcribed word is active in the grid window")}
     level = "frame"
+    labels = {
+        "default": {
+            "interpretability": "nameable",
+            "derivation": "formula-on-model",
+            "derived_from": DEFAULT_WHISPER_MODEL,
+        },
+        "columns": {
+            "speech_rate_words": {
+                "Description": "Transcribed word onsets per second", "Units": "Hz"},
+            "speech_rate_word_duration": {
+                "Description": "Time-weighted mean duration of the words active in the window",
+                "Units": "s"},
+            "speech_rate_pauses": {
+                "Description": f"Within-utterance pauses per second (gaps between words of "
+                               f"{MIN_PAUSE_SEC:g} to {MAX_PAUSE_SEC:g} s)", "Units": "Hz"},
+        },
+    }
+    parent_model = "transcribe"
     checkpoint = None  # analytic — provenance lives with transcribe's checkpoint
 
     def derive(self, words_df: pd.DataFrame, grid) -> dict[str, np.ndarray]:

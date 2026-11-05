@@ -71,6 +71,15 @@ def silent_windows(y: np.ndarray, sr: int, centers: np.ndarray) -> np.ndarray:
 class ClapModel(BaseModel):
     name = "clap"
     level = "frame"
+    labels = {
+        "default": {
+            "interpretability": "opaque",
+            "derivation": "embedding",
+            "Description": "LAION-CLAP audio embedding dimension (512-d, L2-normalised, 10 s "
+                           "context window)",
+        },
+        "columns": {},
+    }
     input_sr = 48000
     window_sec = WINDOW_SEC
 

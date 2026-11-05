@@ -24,6 +24,15 @@ DOWNBEAT_TOLERANCE_SEC = 0.03
 class BeatsModel(BaseModel):
     name = "beats"
     level = "events"
+    labels = {
+        "default": {"interpretability": "nameable", "derivation": "trained-on-labels"},
+        "columns": {
+            "time": {"LongName": "Beat time", "Description": "Time of the detected beat",
+                     "Units": "s"},
+            "beats_is_downbeat": {"LongName": "Downbeat",
+                                  "Description": "Whether the beat is a detected downbeat"},
+        },
+    }
     checkpoint = "beat_this/final0"  # Audio2Beats' default checkpoint_path
 
     def load(self) -> None:

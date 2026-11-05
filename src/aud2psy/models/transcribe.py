@@ -46,6 +46,7 @@ import numpy as np
 import pandas as pd
 
 from .base import BaseModel, undefined
+from .diarize import DEFAULT_PIPELINE
 
 # §4.1 column convention. Two kinds of column here and the split matters:
 #
@@ -105,6 +106,41 @@ class TranscribeModel(BaseModel):
     # median_f0 is added to the segments table only when pitch runs alongside
     nulls = {"median_f0": undefined("every pitch_f0 frame spanning the segment is unvoiced")}
     level = "segment"
+    labels = {
+        "default": {"interpretability": "nameable", "derivation": "trained-on-labels"},
+        "columns": {
+            "chunk_idx": {"derivation": "bookkeeping", "Description": "Ordinal of the segment"},
+            "word_idx": {"derivation": "bookkeeping", "Description": "Ordinal of the word"},
+            "onset": {"Description": "Segment or word start (Whisper timestamp)", "Units": "s"},
+            "offset": {"Description": "Segment or word end (Whisper timestamp)", "Units": "s"},
+            "transcribe_text": {"Description": "Whisper transcript of the segment"},
+            "word": {"Description": "Whisper transcript of the word"},
+            "transcribe_asr_confidence": {
+                "derivation": "bookkeeping",
+                "Description": "exp(mean token log-probability) of the segment's decode"},
+            "transcribe_no_speech_prob": {
+                "derivation": "bookkeeping",
+                "Description": "Whisper's no-speech probability for the segment's decode window"},
+            "transcribe_probability": {
+                "derivation": "bookkeeping", "Description": "Whisper's word probability"},
+            "is_filler": {
+                "Description": "Whether the word is a filler tag ([UH], [UM]); verbatim mode only"},
+            "median_f0": {
+                "derivation": "formula",
+                "Description": "Median pitch_f0 (pYIN) over the segment's voiced frames",
+                "Units": "Hz"},
+            "voice_gender": {
+                "derivation": "formula",
+                "Description": "Coarse voice-pitch class from median_f0 (F at or above 150 Hz, "
+                               "M below; empty when unvoiced)",
+                "Levels": {"F": "median f0 >= 150 Hz", "M": "median f0 < 150 Hz"}},
+            "speaker": {
+                "derivation": "formula-on-model",
+                "derived_from": DEFAULT_PIPELINE,
+                "Description": "Diarized speaker assigned by majority overlap (segments) or "
+                               "word midpoint (words)"},
+        },
+    }
 
     def __init__(
         self,

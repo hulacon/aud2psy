@@ -57,6 +57,15 @@ def window_starts(n_samples: int, sr: int, centers: np.ndarray) -> list[int]:
 class EBindAudioModel(BaseModel):
     name = "ebind_audio"
     level = "frame"
+    labels = {
+        "default": {
+            "interpretability": "opaque",
+            "derivation": "embedding",
+            "Description": "EBind audio embedding dimension (1024-d, ImageBind audio trunk "
+                           "projected into the EBind space, L2-normalised, 2 s context window)",
+        },
+        "columns": {},
+    }
     input_sr = 16000  # ImageBind's audio sample rate
     window_sec = WINDOW_SEC
 

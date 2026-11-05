@@ -7,6 +7,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-11-05
+
+Minor release. No output values change, so nothing needs re-extracting:
+`aud2psy sidecar refresh` brings existing sidecars to 1.2.
+
+### Added
+
+- **Contract B schema 1.2 (`labels`):** every model entry in the sidecar
+  carries `labels`, `{"default": {...}, "columns": {...}}`, saying what each
+  column is and how its value is computed (constellation-contracts §4.1). The
+  default applies to every column; a `columns` entry replaces individual keys
+  for that column (key-wise merge). Every column resolves to
+  `interpretability` (`nameable` / `opaque`) and `derivation` (`formula`,
+  `formula-on-model`, `trained-on-labels`, `probe`, `zero-shot`, `embedding`,
+  `bookkeeping`); `derived_from` names the parent checkpoint exactly where the
+  derivation is `formula-on-model`, `probe` or `zero-shot`. Optional
+  `source_validation` and BIDS column keys (`LongName`, `Description`,
+  `Units`, `Levels`). `schema_version` is now `"1.2"`.
+  - Declared on the model class (`BaseModel.labels`; vocabularies and
+    `resolve_label` in `aud2psy.models.base`) and stamped by
+    `metadata.stamp_labels`, filtered to the columns the run emitted.
+  - All 20 models are labelled. MFCCs (`egemaps_mfcc1`-`4`,
+    `timbre_mfcc_01`-`13`) and the `clap` / `ebind_audio` embeddings are
+    `opaque`; every other feature column is `nameable`. `sound_events` is
+    `zero-shot` and `music_emotion` a `probe`, both `derived_from` the CLAP
+    checkpoint; `conversation` and `speech_rate` are `formula-on-model` from
+    the diarize pipeline and the Whisper checkpoint; `speech`,
+    `speech_emotion`, `beats`, `diarize` and `transcribe` are
+    `trained-on-labels`; the DSP models are `formula`. Row ordinals and
+    decoder confidences (`turn_idx`, `chunk_idx`, `word_idx`,
+    `transcribe_asr_confidence`, `transcribe_no_speech_prob`,
+    `transcribe_probability`) are `bookkeeping`.
+  - `conversation` and `speech_rate` declare a `parent_model`: when the
+    parent ran in the same call, `derived_from` is the checkpoint it recorded
+    (e.g. `transcribe --verbatim`), not the default.
+  - `source_validation` is filled only where the repository records the
+    numbers: `music_emotion` (song-level cross-validation, read from the
+    probe's provenance JSON) and `speech_emotion` (CCC on MSP-Podcast, as
+    the module docstring cites the model's paper).
+- `aud2psy sidecar refresh` writes `labels` too (JSON only, as for `nulls`)
+  and re-stamps them, so a label-only patch release reaches existing
+  sidecars.
+- `tests/test_labels.py`: the producer-duty contract test. Every column of
+  every model's inventory resolves, every `columns` key is a real column,
+  values come from the vocabularies, and `derived_from` is present exactly
+  where required and names a checkpoint aud2psy records. The offline models'
+  inventories are checked against a real run.
+
+### Changed
+
+- `timbre` passes `fmin=200` to `spectral_contrast` explicitly. That is
+  librosa's default, so values are unchanged; the band edges in the labels
+  now follow the code.
+
 ## [0.20.0] - 2026-11-05
 
 Minor release with a **breaking default**: the speech gate on `egemaps`'

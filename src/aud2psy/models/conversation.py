@@ -36,6 +36,7 @@ import pandas as pd
 
 from ..exceptions import Aud2PsyError
 from .base import BaseModel, undefined
+from .diarize import DEFAULT_PIPELINE
 
 FINE_DT = 0.01  # seconds; activity sampling resolution
 
@@ -46,6 +47,30 @@ class ConversationModel(BaseModel):
     name = "conversation"
     nulls = {"conversation_turn_duration": undefined("no diarized speaker is active in the grid window")}
     level = "frame"
+    labels = {
+        "default": {
+            "interpretability": "nameable",
+            "derivation": "formula-on-model",
+            "derived_from": DEFAULT_PIPELINE,
+        },
+        "columns": {
+            "conversation_n_speakers": {
+                "Description": "Distinct diarized speakers active in the grid window"},
+            "conversation_speech_fraction": {
+                "Description": "Fraction of the window with at least one active speaker"},
+            "conversation_overlap_fraction": {
+                "Description": "Fraction of the window with two or more concurrent speakers"},
+            "conversation_turn_rate": {
+                "Description": "Turn onsets per second", "Units": "Hz"},
+            "conversation_switch_rate": {
+                "Description": "Onsets per second of turns whose speaker differs from the "
+                               "preceding turn's", "Units": "Hz"},
+            "conversation_turn_duration": {
+                "Description": "Time-weighted mean duration of the turns active in the window",
+                "Units": "s"},
+        },
+    }
+    parent_model = "diarize"
     checkpoint = None  # analytic — provenance lives with diarize's checkpoint
 
     def derive(self, turns_df: pd.DataFrame, grid) -> dict[str, np.ndarray]:

@@ -14,6 +14,19 @@ class LoudnessModel(BaseModel):
     name = "loudness"
     nulls = undefinable_trailing("loudness_rms", "loudness_db")
     level = "frame"
+    labels = {
+        "default": {"interpretability": "nameable", "derivation": "formula"},
+        "columns": {
+            "loudness_rms": {
+                "LongName": "RMS amplitude",
+                "Description": "Root-mean-square amplitude in the grid window, on the file's "
+                               "uncalibrated digital scale (full scale = 1)"},
+            "loudness_db": {
+                "LongName": "RMS level",
+                "Description": "Window-mean RMS in decibels re digital full scale",
+                "Units": "dBFS"},
+        },
+    }
 
     def extract(self, y: np.ndarray, sr: int, grid) -> dict[str, np.ndarray]:
         import librosa

@@ -86,6 +86,25 @@ class EgemapsModel(SpeechGated, BaseModel):
            for n in VOICED_RAW},
     }
     level = "frame"
+    labels = {
+        "default": {"interpretability": "nameable", "derivation": "formula"},
+        "columns": {
+            **{f"egemaps_mfcc{i}": {
+                "interpretability": "opaque",
+                "LongName": f"MFCC {i} (eGeMAPS)"} for i in range(1, 5)},
+            "egemaps_f0_semitone": {
+                "LongName": "Fundamental frequency",
+                "Description": "F0 on a semitone scale from 27.5 Hz (openSMILE)",
+                "Units": "semitones"},
+            "egemaps_hnr": {"LongName": "Harmonics-to-noise ratio", "Units": "dB"},
+            "egemaps_shimmer": {"LongName": "Shimmer (local)", "Units": "dB"},
+            "egemaps_jitter": {"LongName": "Jitter (local)"},
+            **{f"egemaps_f{k}_freq": {"LongName": f"Formant {k} frequency", "Units": "Hz"}
+               for k in (1, 2, 3)},
+            **{f"egemaps_f{k}_bw": {"LongName": f"Formant {k} bandwidth", "Units": "Hz"}
+               for k in (1, 2, 3)},
+        },
+    }
     # eGeMAPS's reference rate; also what Silero VAD wants, and openSMILE's
     # 10 ms hop lands on integer samples here (221-sample steps at 22050)
     input_sr = 16000

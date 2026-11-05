@@ -31,6 +31,14 @@ N_FFT = 2048
 HOP_LENGTH = 512
 N_MFCC = 13  # coefficients 1-13; c0 (log-energy) excluded
 N_CONTRAST_BANDS = 6  # librosa default -> 7 rows (6 octave sub-bands + top)
+CONTRAST_FMIN = 200.0  # librosa default: the first band is 0-fmin, then octaves up from fmin
+# Band edges as librosa's spectral_contrast draws them; the top band runs to Nyquist.
+CONTRAST_BANDS = (
+    [f"0-{CONTRAST_FMIN:g} Hz"]
+    + [f"{CONTRAST_FMIN * 2**k:g}-{CONTRAST_FMIN * 2**(k + 1):g} Hz"
+       for k in range(N_CONTRAST_BANDS - 1)]
+    + [f"above {CONTRAST_FMIN * 2**(N_CONTRAST_BANDS - 1):g} Hz"]
+)
 
 
 class TimbreModel(BaseModel):
@@ -39,6 +47,26 @@ class TimbreModel(BaseModel):
                                  *(f"timbre_contrast_{i:02d}" for i in range(1, 8)),
                                  "timbre_flatness")
     level = "frame"
+    labels = {
+        "default": {"interpretability": "nameable", "derivation": "formula"},
+        "columns": {
+            **{f"timbre_mfcc_{i:02d}": {
+                "interpretability": "opaque",
+                "LongName": f"MFCC {i}",
+                "Description": f"Mel-frequency cepstral coefficient {i} (librosa, 128 mel bands), "
+                               "window mean"}
+               for i in range(1, N_MFCC + 1)},
+            **{f"timbre_contrast_{b + 1:02d}": {
+                "LongName": f"Spectral contrast, band {b + 1}",
+                "Description": f"Peak-valley spectral contrast in octave band {band} (librosa "
+                               "spectral_contrast)",
+                "Units": "dB"}
+               for b, band in enumerate(CONTRAST_BANDS)},
+            "timbre_flatness": {
+                "LongName": "Spectral flatness",
+                "Description": "Wiener entropy: ~1 on white noise, ~0 on a pure tone"},
+        },
+    }
 
     def extract(self, y: np.ndarray, sr: int, grid) -> dict[str, np.ndarray]:
         import librosa
@@ -49,7 +77,8 @@ class TimbreModel(BaseModel):
         mfcc = librosa.feature.mfcc(
             y=y, sr=sr, n_mfcc=N_MFCC + 1, n_fft=N_FFT, hop_length=HOP_LENGTH
         )[1:]
-        contrast = librosa.feature.spectral_contrast(S=S, sr=sr, n_bands=N_CONTRAST_BANDS)
+        contrast = librosa.feature.spectral_contrast(
+            S=S, sr=sr, n_bands=N_CONTRAST_BANDS, fmin=CONTRAST_FMIN)
         flatness = librosa.feature.spectral_flatness(S=S)[0]
 
         out = {

@@ -13,6 +13,22 @@ class OnsetsModel(BaseModel):
     name = "onsets"
     nulls = undefinable_trailing("onsets_strength", "onsets_tempo")  # onsets_rate counts: never NaN
     level = "frame"
+    labels = {
+        "default": {"interpretability": "nameable", "derivation": "formula"},
+        "columns": {
+            "onsets_strength": {
+                "LongName": "Onset strength",
+                "Description": "librosa onset-strength envelope (log-mel spectral flux), window mean"},
+            "onsets_rate": {
+                "LongName": "Onset rate",
+                "Description": "Detected onsets per second in the grid window",
+                "Units": "Hz"},
+            "onsets_tempo": {
+                "LongName": "Local tempo",
+                "Description": "librosa frame-wise tempo estimate from the onset envelope",
+                "Units": "BPM"},
+        },
+    }
 
     def extract(self, y: np.ndarray, sr: int, grid) -> dict[str, np.ndarray]:
         import librosa

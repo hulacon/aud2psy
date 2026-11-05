@@ -41,11 +41,11 @@ def get_model_version(model_name: str) -> str:
     return fallback or "unknown"
 
 
-SCHEMA_VERSION = "1.1"  # Contract B §4.1 extractor output convention
+SCHEMA_VERSION = "1.2"  # Contract B §4.1 extractor output convention
 
 
-def declared_nulls(model_name: str) -> dict[str, dict[str, str]]:
-    """The model's Contract B 1.1 ``nulls`` map, read from its class.
+def model_class(model_name: str) -> type:
+    """The registered model's class, imported without instantiating it.
 
     Every model module imports only numpy/pandas at top level, so this never
     loads weights. A name outside the registry is a caller bug and raises.
@@ -55,8 +55,20 @@ def declared_nulls(model_name: str) -> dict[str, dict[str, str]]:
     from .cli import MODEL_REGISTRY
 
     module_path, class_name, _ = MODEL_REGISTRY[model_name]
-    cls = getattr(importlib.import_module(module_path), class_name)
-    return {col: dict(entry) for col, entry in cls.nulls.items()}
+    return getattr(importlib.import_module(module_path), class_name)
+
+
+def declared_nulls(model_name: str) -> dict[str, dict[str, str]]:
+    """The model's Contract B 1.1 ``nulls`` map, read from its class."""
+    return {col: dict(entry) for col, entry in model_class(model_name).nulls.items()}
+
+
+def declared_labels(model_name: str) -> dict[str, dict]:
+    """The model's Contract B 1.2 ``labels`` (``default`` + ``columns``), read from its class."""
+    import copy
+
+    labels = copy.deepcopy(model_class(model_name).labels)
+    return {"default": labels.get("default", {}), "columns": labels.get("columns", {})}
 
 
 def stamp_nulls(model_meta: dict) -> dict:
@@ -73,6 +85,30 @@ def stamp_nulls(model_meta: dict) -> dict:
             emitted = set(entry["columns"])
             declared = {c: e for c, e in declared.items() if c in emitted}
         entry["nulls"] = declared
+    return model_meta
+
+
+def stamp_labels(model_meta: dict) -> dict:
+    """Set ``labels`` on every model entry from its class (overwriting any stale map).
+
+    As with nulls, where the entry lists its ``columns`` only the ``columns``
+    overrides for columns the run emitted are kept (a key must be a real
+    column). A model with a ``parent_model`` whose entry is in the same
+    sidecar gets that entry's recorded checkpoint as ``derived_from``, so the
+    label names the weights the parent actually ran with.
+    """
+    for name, entry in model_meta.items():
+        labels = declared_labels(name)
+        if "columns" in entry:
+            emitted = set(entry["columns"])
+            labels["columns"] = {c: e for c, e in labels["columns"].items() if c in emitted}
+        parent = model_class(name).parent_model
+        recorded = (model_meta.get(parent) or {}).get("checkpoint") if parent else None
+        if recorded:
+            for e in (labels["default"], *labels["columns"].values()):
+                if "derived_from" in e:
+                    e["derived_from"] = recorded
+        entry["labels"] = labels
     return model_meta
 
 
@@ -102,7 +138,7 @@ def build_sidecar(
             "path": str(input_path),
             "duration_sec": round(duration, 3) if duration is not None else None,
         },
-        "models": stamp_nulls(model_meta),
+        "models": stamp_labels(stamp_nulls(model_meta)),
         "total_runtime_sec": total_runtime_sec,
     }
     if hop is not None:

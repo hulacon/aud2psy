@@ -50,8 +50,13 @@ and word2psy outputs. The `.meta.json` sidecar carries `schema_version`,
 identifier (`null` for analytic models), so every CSV is traceable to the
 weights that produced it. Each model entry also carries `nulls` (Contract B
 schema 1.1): which of its columns can be NaN and what that means — e.g.
-`pitch_f0` is `undefined` when a window is unvoiced. `aud2psy sidecar refresh
-DIR` brings older sidecars up to date without touching a CSV.
+`pitch_f0` is `undefined` when a window is unvoiced. It also carries `labels`
+(schema 1.2): for each column, whether it is `nameable` or `opaque` and how
+its value is computed (`formula`, `formula-on-model`, `trained-on-labels`,
+`probe`, `zero-shot`, `embedding` or `bookkeeping`), with the parent
+checkpoint (`derived_from`) for computed-on-a-model columns and BIDS-style
+`LongName` / `Description` / `Units` where they apply. `aud2psy sidecar
+refresh DIR` brings older sidecars up to date without touching a CSV.
 
 A wordless clip produces a zero-row transcript and `n_speech_segments: 0`
 in the sidecar — an explicit result, not an error.

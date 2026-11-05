@@ -15,6 +15,24 @@ class SpectralModel(BaseModel):
     nulls = undefinable_trailing("spectral_centroid", "spectral_bandwidth", "spectral_rolloff",
                                  "spectral_flux", "spectral_zcr")
     level = "frame"
+    labels = {
+        "default": {"interpretability": "nameable", "derivation": "formula"},
+        "columns": {
+            "spectral_centroid": {"LongName": "Spectral centroid", "Units": "Hz"},
+            "spectral_bandwidth": {"LongName": "Spectral bandwidth", "Units": "Hz"},
+            "spectral_rolloff": {
+                "LongName": "Spectral rolloff",
+                "Description": "Frequency below which 85% of the spectral magnitude lies",
+                "Units": "Hz"},
+            "spectral_flux": {
+                "LongName": "Spectral flux",
+                "Description": "L2 norm of the half-wave-rectified frame-to-frame STFT "
+                               "magnitude change"},
+            "spectral_zcr": {
+                "LongName": "Zero-crossing rate",
+                "Description": "Fraction of consecutive samples that change sign"},
+        },
+    }
 
     def extract(self, y: np.ndarray, sr: int, grid) -> dict[str, np.ndarray]:
         import librosa

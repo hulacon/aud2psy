@@ -51,7 +51,7 @@ from __future__ import annotations
 import numpy as np
 
 from .base import undefined
-from .clap import SILENCE_DBFS, ClapModel, silent_windows
+from .clap import DEFAULT_CHECKPOINT, SILENCE_DBFS, ClapModel, silent_windows
 
 # category -> prompt ensemble. Keys become columns: sound_events_<key>.
 PROMPT_BANK: dict[str, list[str]] = {
@@ -92,6 +92,22 @@ class SoundEventsModel(ClapModel):
         "the 10 s CLAP context window is below SILENCE_DBFS (-80 dBFS): digital silence")
         for c in PROMPT_BANK}
     level = "frame"
+    labels = {
+        "default": {
+            "interpretability": "nameable",
+            "derivation": "zero-shot",
+            "derived_from": DEFAULT_CHECKPOINT,
+        },
+        "columns": {
+            f"sound_events_{cat}": {
+                "LongName": f"{cat.replace('_', ' ')} (zero-shot)",
+                "Description": "Raw cosine between the 10 s CLAP audio embedding and the "
+                               f"prompt-ensemble embedding of {prompts}; compare within a "
+                               "column, cross-column comparison is ordinal at best",
+            }
+            for cat, prompts in PROMPT_BANK.items()
+        },
+    }
 
     def load(self) -> None:
         super().load()

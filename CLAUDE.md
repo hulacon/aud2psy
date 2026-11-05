@@ -56,7 +56,11 @@ an audio–text embedding space the way viz2psy's `clip` and word2psy's
   — the word2psy chunk-model convention; psytwill's `PROFILE_REGISTRY`
   pattern-matches these (entries `loudness`/`pitch`/`spectral`/`onsets` +
   combined `acoustic` were added to psytwill in Aug 2026 — coordinate any
-  renaming with that registry).
+  renaming with that registry). Contract B declarations live on the class
+  too: `checkpoint`, `nulls` (schema 1.1) and `labels` (schema 1.2:
+  `default` + per-column overrides, merged key-wise; vocabularies in
+  `base.py`, contract test `tests/test_labels.py`). A new or renamed column
+  needs its label, and its `inventory()` entry in that test.
 - **`models/`** — frame level: `loudness` (rms, db — dB of window-mean RMS),
   `pitch` (pyin f0 in 65–2093 Hz, voiced_prob; f0 NaN when unvoiced),
   `spectral` (centroid, bandwidth, rolloff, flux = half-wave-rectified STFT
