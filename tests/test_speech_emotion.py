@@ -8,9 +8,14 @@ is behind the `weights` marker: pytest -m weights
 import numpy as np
 import pytest
 
+import pandas as pd
+
+from aud2psy.exceptions import Aud2PsyError
+from aud2psy.grid import Grid
 from aud2psy.models.speech_emotion import (
     GATE_MIN_SPEECH,
     WINDOW_SEC,
+    SpeechEmotionModel,
     context_windows,
     speech_fraction,
 )
@@ -67,6 +72,39 @@ def test_real_vad_gates_nonspeech():
         assert (frac < GATE_MIN_SPEECH).all()
 
 
+def _stub_model(speech_gate="diarize"):
+    """A SpeechEmotionModel whose inference is a constant: gating without weights."""
+    model = SpeechEmotionModel(device="cpu", speech_gate=speech_gate)
+    model.predict_windows = lambda y, sr, centers: np.full((len(centers), 3), 0.5)
+    return model
+
+
+def test_diarize_gate_on_the_context_window():
+    model = _stub_model()
+    # 8 s clip, speech 0-3 s; 4 s windows centred at 1, 3, 5, 7 (edge-clamped)
+    model.turns_ = pd.DataFrame({"speaker": ["A", "B"], "onset": [0.0, 1.0],
+                                 "offset": [2.0, 3.0]})  # overlap counts once
+    feats = model.extract(silence(8.0, sr=SR), SR, Grid.for_duration(8.0, 2.0))
+    # coverage: [0,4) .75, [1,5) .5, [3,7) 0, [4,8) 0
+    assert np.isfinite(feats["speech_emotion_arousal"][:2]).all()
+    assert np.isnan(feats["speech_emotion_arousal"][2:]).all()
+    assert model.info_["speech_gate"] == "diarize"
+    assert model.info_["speech_gate_window_sec"] == WINDOW_SEC
+    assert model.info_["n_gated_windows"] == 2
+
+
+def test_diarize_gate_without_turns_fails_before_inference():
+    model = _stub_model()
+    model.predict_windows = lambda *a: pytest.fail("inference ran before the gate check")
+    with pytest.raises(Aud2PsyError, match="--speakers"):
+        model.extract(silence(4.0, sr=SR), SR, Grid.for_duration(4.0, 0.5))
+
+
+def test_unknown_gate_is_refused():
+    with pytest.raises(ValueError, match="diarize, silero"):
+        SpeechEmotionModel(device="cpu", speech_gate="vad")
+
+
 @pytest.mark.weights
 def test_speech_emotion_on_speech_and_music(tmp_path):
     import shutil
@@ -85,7 +123,7 @@ def test_speech_emotion_on_speech_and_music(tmp_path):
         ["ffmpeg", "-nostdin", "-y", "-i", str(aiff), "-ac", "1", "-ar", "16000", str(wav)],
         check=True, capture_output=True,
     )
-    res = score_audio(wav, ["speech_emotion"])
+    res = score_audio(wav, ["speech_emotion"], speech_gate="silero")
     cols = ["speech_emotion_valence", "speech_emotion_arousal", "speech_emotion_dominance"]
     df = res.frames_df
     assert list(df.columns) == ["time"] + cols
@@ -96,5 +134,5 @@ def test_speech_emotion_on_speech_and_music(tmp_path):
     # pure tone: every window gated to NaN
     tone = tmp_path / "tone.wav"
     sf.write(tone, sine(440.0, 6.0, sr=16000), 16000)
-    res_tone = score_audio(tone, ["speech_emotion"])
+    res_tone = score_audio(tone, ["speech_emotion"], speech_gate="silero")
     assert res_tone.frames_df[cols].isna().all().all()

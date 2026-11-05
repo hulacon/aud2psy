@@ -7,8 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-11-05
+
+Minor release with a **breaking default**: the speech gate on `egemaps`'
+voiced set and on `speech_emotion` now reads diarized speaker turns, and a
+call that runs either model needs a turn table.
+
 ### Changed
 
+- **Speech gate: diarized-speech coverage replaces Silero VAD by default**
+  (`aud2psy.speech_gate`; CLI `--speech-gate {diarize,silero}`, API
+  `speech_gate=`). A window of a gated model is now speech when pyannote
+  speaker turns cover at least `GATE_MIN_SPEECH` (0.25) of it: the grid
+  window for `egemaps`, the 4 s context window for `speech_emotion`.
+  Before, it was speech when its mean Silero speech probability reached the
+  same 0.25. Silero under-calls speech that overlaps music or background
+  noise, the usual case in film audio, so those windows were NaN; the
+  diarize gate keeps more of them, at the cost of firing on some non-speech
+  vocal sound. **Changes output values** of `egemaps`' 15 voiced columns
+  and the 3 `speech_emotion` columns (which windows are NaN); nothing else.
+  - The turns come from `diarize` in the same call, or from an existing
+    `{stem}_speakers.csv` via `--speakers` (`speakers_csv=`), which now
+    feeds the gate as well as `conversation`. A batch needs `diarize` in the
+    same call.
+  - **Breaking:** a gated model with neither now fails, and the error names
+    the three fixes. `--speech-gate silero` restores the previous gate
+    exactly. `--all` without pyannote installed skips `egemaps` and
+    `speech_emotion` (with a note), as it already skipped `conversation`.
+  - In a single-file call, `diarize` now runs before the frame models, so it
+    comes first in the sidecar's `models` map.
+  - Sidecar: both models record `speech_gate`, `speech_gate_measure`,
+    `speech_gate_min`, `speech_gate_window_sec`, `n_gated_windows` and, for
+    the diarize gate, `speech_gate_turns_source`. `egemaps`'
+    `vad_gate_min_speech` key is replaced by `speech_gate_min`. The `nulls`
+    entries for the gated columns name the gate generically.
+  - `speech_fraction` and `GATE_MIN_SPEECH` moved to `aud2psy.speech_gate`.
+    `aud2psy.models.speech_emotion` still re-exports both.
 - The EBind checkpoint `encord-team/ebind-full` loads at a pinned hub revision (`482831d`, `DEFAULT_REVISION`) instead of whatever `main` is. That snapshot has been `main` since 2025-11-19, so features are unchanged. viz2psy, word2psy and aud2psy pin the same revision, so the shared space cannot split when the hub moves. A non-default checkpoint still loads from `main`. The `beats` extra pins `beat_this` to `b95c8ab`, and the `ebind` extra pins the `ebind` package to `7909701`: the builds the family has been running on.
 
 ## [0.19.0] - 2026-10-15

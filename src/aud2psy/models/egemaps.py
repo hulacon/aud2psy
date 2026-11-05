@@ -16,10 +16,12 @@ in the sidecar. Two NaN conventions:
   unvoiced frames; exact zeros are converted to NaN before grid averaging
   (matching openSMILE's own "nz" functional convention and the pitch
   model's unvoiced-f0 NaN).
-- The voiced set is additionally **Silero-VAD-gated** per grid window
-  (the speech_emotion precedent): "jitter" measured on a violin line is
-  not voice quality. The general-audio columns (loudness, spectral
-  balance, MFCCs, flux) stay ungated.
+- The voiced set is additionally **speech-gated** per grid window (the
+  speech_emotion precedent; ``aud2psy.speech_gate``): "jitter" measured on
+  a violin line is not voice quality. The gate is diarized-speech coverage
+  by default, or Silero VAD (``speech_gate="silero"``, the pre-0.20 gate).
+  The general-audio columns (loudness, spectral balance, MFCCs, flux) stay
+  ungated.
 
 opensmile is an optional extra (``pip install "aud2psy[egemaps]"``): the
 bundled openSMILE binaries are under audEERING's research-only license
@@ -34,8 +36,8 @@ from __future__ import annotations
 
 import numpy as np
 
+from ..speech_gate import DEFAULT_SPEECH_GATE, GATE_MIN_SPEECH, SpeechGated, check_gate
 from .base import BaseModel, undefined, undefinable_trailing
-from .speech_emotion import GATE_MIN_SPEECH, speech_fraction
 
 FEATURE_SET = "eGeMAPSv02"
 
@@ -68,23 +70,28 @@ RAW_TO_CLEAN = {
     "F3amplitudeLogRelF0_sma3nz": "egemaps_f3_amp",
 }
 
-# the pitch-synchronous set: 0-as-unvoiced sentinel + VAD gate
+# the pitch-synchronous set: 0-as-unvoiced sentinel + speech gate
 VOICED_RAW = tuple(n for n in RAW_TO_CLEAN if n.endswith("_sma3nz"))
 
 
-class EgemapsModel(BaseModel):
+class EgemapsModel(SpeechGated, BaseModel):
     name = "egemaps"
     nulls = {
         **undefinable_trailing(*(c for n, c in RAW_TO_CLEAN.items() if n not in VOICED_RAW)),
         **{RAW_TO_CLEAN[n]: undefined(
             "every frame in the grid window is unvoiced (openSMILE nz zero), or the window's "
-            "Silero speech fraction is below GATE_MIN_SPEECH (0.25)", trailing=True)
+            "speech measure under the run's speech gate (sidecar `speech_gate`: diarized-turn "
+            f"coverage, or mean Silero probability) is below GATE_MIN_SPEECH ({GATE_MIN_SPEECH})",
+            trailing=True)
            for n in VOICED_RAW},
     }
     level = "frame"
     # eGeMAPS's reference rate; also what Silero VAD wants, and openSMILE's
     # 10 ms hop lands on integer samples here (221-sample steps at 22050)
     input_sr = 16000
+
+    def __init__(self, speech_gate: str = DEFAULT_SPEECH_GATE):
+        self.speech_gate = check_gate(speech_gate)
 
     def load(self) -> None:
         try:
@@ -94,13 +101,11 @@ class EgemapsModel(BaseModel):
                 "The egemaps model needs the optional opensmile dependency: "
                 'pip install "aud2psy[egemaps]"'
             ) from exc
-        from faster_whisper.vad import get_vad_model
-
         self.model = opensmile.Smile(
             feature_set=opensmile.FeatureSet.eGeMAPSv02,
             feature_level=opensmile.FeatureLevel.LowLevelDescriptors,
         )
-        self.vad = get_vad_model()
+        self.load_gate()
 
     def unload(self) -> None:
         for attr in ("model", "vad"):
@@ -115,7 +120,7 @@ class EgemapsModel(BaseModel):
         times = (starts + ends) / 2
         # per-window gate at the grid's own resolution (LLDs are local,
         # unlike speech_emotion's 4 s context windows)
-        gated = speech_fraction(self.vad, y, sr, grid.centers, grid.hop) < GATE_MIN_SPEECH
+        gated = self.gate_mask(y, sr, grid.centers, grid.hop)
 
         out: dict[str, np.ndarray] = {}
         for raw, clean in RAW_TO_CLEAN.items():
@@ -130,8 +135,7 @@ class EgemapsModel(BaseModel):
         self.info_ = {
             "feature_set": FEATURE_SET,
             "opensmile_version": opensmile.__version__,
-            "vad_gate_min_speech": GATE_MIN_SPEECH,
-            "n_gated_windows": int(gated.sum()),
+            **self.gate_info(gated, grid.hop),
             "gated_columns": [RAW_TO_CLEAN[n] for n in VOICED_RAW],
             "opensmile_names": {v: k for k, v in RAW_TO_CLEAN.items()},
         }

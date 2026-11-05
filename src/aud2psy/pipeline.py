@@ -12,6 +12,7 @@ import pandas as pd
 from .audio import FEATURE_SR, WHISPER_SR, input_type, load_audio
 from .grid import Grid
 from .metadata import build_sidecar, get_model_version
+from .speech_gate import DEFAULT_SPEECH_GATE, GATED_MODELS, check_gate
 
 
 @dataclass
@@ -74,6 +75,18 @@ def get_model(name: str, **kwargs):
     return cls(**kwargs)
 
 
+def _gate_without_turns(frame_names: list[str], batch: bool) -> str:
+    """The error for a diarize-gated model with no turn table: what failed and the fix."""
+    gated = ", ".join(m for m in frame_names if m in GATED_MODELS)
+    source = ("run diarize in the same call (in a batch a single speakers table "
+              "cannot map onto several inputs)" if batch else
+              "run diarize in the same call, or pass an existing {stem}_speakers.csv "
+              "via speakers_csv (CLI: --speakers)")
+    return (f"{gated} gate on diarized speech (speech_gate='diarize', the default "
+            f"since aud2psy 0.20.0) and needs a speaker-turn table: {source}; or "
+            "choose the Silero gate, speech_gate='silero' (CLI: --speech-gate silero)")
+
+
 def _transcribe_columns(transcript_df, words_df) -> list:
     """Every column the `transcribe` model writes, across both its tables.
 
@@ -104,15 +117,20 @@ def score_audio(
     speakers_csv: str | Path | None = None,
     words_csv: str | Path | None = None,
     verbatim: bool = False,
+    speech_gate: str = DEFAULT_SPEECH_GATE,
     show_progress: bool = True,
 ) -> ScoreResult:
     """Run the named models on one audio/video file.
 
     ``speakers_csv``: an existing diarize turn table ({stem}_speakers.csv)
-    for the ``conversation`` model, instead of running ``diarize`` in the
-    same call; when given, it is the turn source even if diarize also runs.
+    for the ``conversation`` model and the ``diarize`` speech gate, instead
+    of running ``diarize`` in the same call; when given, it is the turn
+    source even if diarize also runs.
     ``words_csv``: likewise for ``speech_rate`` — an existing
     {stem}_transcript_words.csv instead of running ``transcribe``.
+    ``speech_gate``: how ``egemaps`` (voiced set) and ``speech_emotion`` find
+    speech — ``"diarize"`` (turn coverage; needs diarize or ``speakers_csv``)
+    or ``"silero"`` (VAD probability, the pre-0.20 gate). See ``speech_gate``.
     """
     from tqdm import tqdm
 
@@ -147,6 +165,10 @@ def score_audio(
             "timestamps; run it together with transcribe, or pass an "
             "existing {stem}_transcript_words.csv via words_csv (CLI: --words)"
         )
+    check_gate(speech_gate)
+    gate_needs_turns = speech_gate == "diarize" and any(m in GATED_MODELS for m in frame_names)
+    if gate_needs_turns and not do_diarize and speakers_csv is None:
+        raise Aud2PsyError(_gate_without_turns(frame_names, batch=False))
 
     audio_cache: dict[int, np.ndarray] = {}
 
@@ -167,15 +189,46 @@ def score_audio(
     if frame_names or do_beats:
         duration = len(audio_at(FEATURE_SR)) / FEATURE_SR
 
+    speakers_df = exclusive_df = None
+    if do_diarize:
+        y_16k = audio_at(WHISPER_SR)
+        if duration is None:
+            duration = len(y_16k) / WHISPER_SR
+        model = get_model("diarize", num_speakers=num_speakers)
+        t_model = time.time()
+        model.load()
+        speakers_df, exclusive_df, diarize_info = model.diarize(y_16k, WHISPER_SR)
+        model.unload()
+        model_meta["diarize"] = {
+            "columns": list(speakers_df.columns),
+            "runtime_sec": round(time.time() - t_model, 2),
+            "package_version": get_model_version("diarize"),
+            "checkpoint": getattr(model, "checkpoint", None),
+        }
+
+    # One turn source for everything that reads turns (conversation, the
+    # diarize speech gate): an explicit table wins over this run's diarize.
+    turns_df = turns_source = None
+    if speakers_csv is not None and (do_conversation or gate_needs_turns):
+        from .models.conversation import load_turns_csv
+
+        turns_df, turns_source = load_turns_csv(speakers_csv), str(speakers_csv)
+    elif do_diarize:
+        turns_df, turns_source = speakers_df, "diarize (this run)"
+
     if frame_names:
         grid = Grid.for_duration(duration, hop)
         columns: dict[str, np.ndarray] = {"time": grid.centers}
         clap_cache: dict = {}  # shares CLAP window embeddings across clap-family models
         for name in tqdm(frame_names, desc="models", disable=not show_progress):
             kwargs = {"checkpoint": clap_model} if name == "clap" and clap_model else {}
+            if name in GATED_MODELS:
+                kwargs["speech_gate"] = speech_gate
             model = get_model(name, **kwargs)
             if hasattr(model, "embed_windows"):
                 model.cache_ = clap_cache
+            if name in GATED_MODELS and speech_gate == "diarize":
+                model.turns_ = turns_df
             t_model = time.time()
             model.load()
             model_sr = model.input_sr or FEATURE_SR
@@ -205,6 +258,8 @@ def score_audio(
             info = getattr(model, "info_", None)
             if info:
                 model_meta[name].update(info)  # an info_ checkpoint is authoritative
+            if name in GATED_MODELS and speech_gate == "diarize":
+                model_meta[name]["speech_gate_turns_source"] = turns_source
         frames_df = pd.DataFrame(columns)
 
     if do_beats:
@@ -220,32 +275,7 @@ def score_audio(
             "checkpoint": getattr(model, "checkpoint", None),
         }
 
-    speakers_df = exclusive_df = None
-    if do_diarize:
-        y_16k = audio_at(WHISPER_SR)
-        if duration is None:
-            duration = len(y_16k) / WHISPER_SR
-        model = get_model("diarize", num_speakers=num_speakers)
-        t_model = time.time()
-        model.load()
-        speakers_df, exclusive_df, diarize_info = model.diarize(y_16k, WHISPER_SR)
-        model.unload()
-        model_meta["diarize"] = {
-            "columns": list(speakers_df.columns),
-            "runtime_sec": round(time.time() - t_model, 2),
-            "package_version": get_model_version("diarize"),
-            "checkpoint": getattr(model, "checkpoint", None),
-        }
-
     if do_conversation:
-        from .models.conversation import load_turns_csv
-
-        if speakers_csv is not None:
-            turns_df = load_turns_csv(speakers_csv)
-            turns_source = str(speakers_csv)
-        else:
-            turns_df = speakers_df
-            turns_source = "diarize (this run)"
         if duration is None:
             duration = len(audio_at(FEATURE_SR)) / FEATURE_SR
         if grid is None:
@@ -377,6 +407,7 @@ def score_audio_batch(
     clap_model: str | None = None,
     num_speakers: int | None = None,
     verbatim: bool = False,
+    speech_gate: str = DEFAULT_SPEECH_GATE,
     show_progress: bool = True,
 ) -> list[ScoreResult]:
     """Run the named models over many files, loading each model ONCE.
@@ -440,6 +471,12 @@ def score_audio_batch(
             "in a batch, the speech_rate model needs transcribe in the same "
             "call (a single words_csv cannot map onto several inputs)"
         )
+    check_gate(speech_gate)
+    gate_needs_turns = speech_gate == "diarize" and any(m in GATED_MODELS for m in frame_names)
+    if gate_needs_turns and not do_diarize:
+        from .exceptions import Aud2PsyError
+
+        raise Aud2PsyError(_gate_without_turns(frame_names, batch=True))
 
     n = len(paths)
     t0 = [time.time()] * n
@@ -499,8 +536,29 @@ def score_audio_batch(
         # here is extraction only and is NOT comparable to score_audio's.
         model_meta[i][name]["batched"] = True
 
+    # diarize first: the diarize speech gate reads its turns in the frame loop
+    if do_diarize:
+        _durations(WHISPER_SR)
+        model = get_model("diarize", num_speakers=num_speakers)
+        model.load()
+        try:
+            for i, p in enumerate(tqdm(paths, desc="diarize", leave=False,
+                                       disable=not show_progress)):
+                t_model = time.time()
+                speakers_df[i], exclusive_df[i], diarize_info[i] = model.diarize(
+                    load_audio(p, WHISPER_SR), WHISPER_SR)
+                model_meta[i]["diarize"] = {
+                    "columns": list(speakers_df[i].columns),
+                    "runtime_sec": round(time.time() - t_model, 2),
+                }
+                _record(i, "diarize", model, None, t_model)
+        finally:
+            model.unload()
+
     for name in tqdm(frame_names, desc="models", disable=not show_progress):
         kwargs = {"checkpoint": clap_model} if name == "clap" and clap_model else {}
+        if name in GATED_MODELS:
+            kwargs["speech_gate"] = speech_gate
         model = get_model(name, **kwargs)
         model.load()
         model_sr = model.input_sr or FEATURE_SR
@@ -509,11 +567,16 @@ def score_audio_batch(
                                        disable=not show_progress)):
                 if hasattr(model, "embed_windows"):
                     model.cache_ = {}  # per-file; see docstring
+                gate_turns = name in GATED_MODELS and speech_gate == "diarize"
+                if gate_turns:
+                    model.turns_ = speakers_df[i]
                 t_model = time.time()
                 feats = model.extract(load_audio(p, model_sr), model_sr, grids[i])
                 for feat, values in feats.items():
                     columns[i][feat] = values
                 _record(i, name, model, feats, t_model)
+                if gate_turns:
+                    model_meta[i][name]["speech_gate_turns_source"] = "diarize (this run)"
         finally:
             model.unload()
 
@@ -531,24 +594,6 @@ def score_audio_batch(
                     "runtime_sec": round(time.time() - t_model, 2),
                 }
                 _record(i, "beats", model, None, t_model)
-        finally:
-            model.unload()
-
-    if do_diarize:
-        _durations(WHISPER_SR)
-        model = get_model("diarize", num_speakers=num_speakers)
-        model.load()
-        try:
-            for i, p in enumerate(tqdm(paths, desc="diarize", leave=False,
-                                       disable=not show_progress)):
-                t_model = time.time()
-                speakers_df[i], exclusive_df[i], diarize_info[i] = model.diarize(
-                    load_audio(p, WHISPER_SR), WHISPER_SR)
-                model_meta[i]["diarize"] = {
-                    "columns": list(speakers_df[i].columns),
-                    "runtime_sec": round(time.time() - t_model, 2),
-                }
-                _record(i, "diarize", model, None, t_model)
         finally:
             model.unload()
 

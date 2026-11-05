@@ -63,7 +63,8 @@ def test_every_model_declares_well_formed_nulls(model):
 
 @pytest.mark.parametrize("name", list(_signals()))
 def test_offline_frame_models_emit_only_declared_nulls(name, wav_factory):
-    result = score_audio(wav_factory(_signals()[name]), OFFLINE, show_progress=False)
+    result = score_audio(wav_factory(_signals()[name]), OFFLINE, speech_gate="silero",
+                         show_progress=False)
     nan_cols = _assert_declared(result.frames_df, OFFLINE)
     for m in OFFLINE:
         entry = result.meta["models"][m]
@@ -73,6 +74,17 @@ def test_offline_frame_models_emit_only_declared_nulls(name, wav_factory):
         # no sharpness, and no voice
         assert {"pitch_f0", "tonal_key_clarity", "psychoacoustic_sharpness",
                 "egemaps_f0_semitone"} <= nan_cols
+
+
+@pytest.mark.parametrize("name", ["tone", "silence_then_tone", "trailing_sliver"])
+def test_diarize_gated_egemaps_emits_only_declared_nulls(name, wav_factory, tmp_path):
+    pytest.importorskip("opensmile")
+    turns = tmp_path / "turns.csv"  # speech over the first 1.5 s only
+    pd.DataFrame({"speaker": ["S"], "onset": [0.0], "offset": [1.5]}).to_csv(turns, index=False)
+    result = score_audio(wav_factory(_signals()[name]), ["egemaps"], speakers_csv=turns,
+                         show_progress=False)
+    nan_cols = _assert_declared(result.frames_df, ["egemaps"])
+    assert "egemaps_f0_semitone" in nan_cols  # the gate fires after 1.5 s
 
 
 def test_roughness_trailing_window_is_undefinable(wav_factory):
@@ -85,7 +97,7 @@ def test_roughness_trailing_window_is_undefinable(wav_factory):
 
 def test_undefinable_nulls_sit_only_on_the_trailing_row(wav_factory):
     y = _signals()["trailing_sliver"]
-    df = score_audio(wav_factory(y), OFFLINE, show_progress=False).frames_df
+    df = score_audio(wav_factory(y), OFFLINE, speech_gate="silero", show_progress=False).frames_df
     undefinable = [c for m in OFFLINE for c, e in declared_nulls(m).items()
                    if e["means"] == "undefinable"]
     assert df["loudness_rms"].iloc[-1] != df["loudness_rms"].iloc[-1]  # the sliver fires
@@ -128,7 +140,8 @@ def test_transcript_median_f0_is_declared():
 @pytest.mark.weights
 @pytest.mark.parametrize("name", ["silence", "tone"])
 def test_weighted_models_emit_only_declared_nulls(name, wav_factory):
-    result = score_audio(wav_factory(_signals()[name]), WEIGHTED, show_progress=False)
+    result = score_audio(wav_factory(_signals()[name]), WEIGHTED, speech_gate="silero",
+                         show_progress=False)
     nan_cols = _assert_declared(result.frames_df, WEIGHTED)
     if name == "silence":
         assert "sound_events_music" in nan_cols and "music_emotion_valence" in nan_cols

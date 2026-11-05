@@ -144,9 +144,9 @@ an audio–text embedding space the way viz2psy's `clip` and word2psy's
   `speech_emotion_valence`/`_arousal`/`_dominance` in the model's native
   ~0–1 (deliberately NOT rescaled — music_emotion's [-1,1] comes from its
   DEAM training targets, not a rescale); 4 s context windows at the grid
-  hop, 16 kHz, MPS w/ CPU fallback; **Silero-VAD-gated** — windows with
-  mean speech prob < 0.25 are NaN, else the model hallucinates affect on
-  music; the custom regression-head class from the model card needed
+  hop, 16 kHz, MPS w/ CPU fallback; **speech-gated** (`speech_gate.py`,
+  see below) — non-speech context windows are NaN, else the model
+  hallucinates affect on music; the custom regression-head class from the model card needed
   `post_init()` instead of its 4.x-era `init_weights()` under
   transformers 5, verified bit-for-bit against the card's reference
   output; weights ungated but CC-BY-NC-SA research-only, documented in
@@ -159,8 +159,8 @@ an audio–text embedding space the way viz2psy's `clip` and word2psy's
   15 pitch-synchronous `_sma3nz` columns get exact-0 unvoiced
   sentinel → NaN before `Grid.average` (openSMILE's own "nz"
   functional convention), then the whole voiced set — including
-  formants, which LPC computes even on noise — is Silero-gated per
-  grid window reusing speech_emotion's `speech_fraction` + threshold;
+  formants, which LPC computes even on noise — is speech-gated per
+  grid window through the same `speech_gate.py` gate as speech_emotion;
   the 10 general-audio columns (loudness/spectral balance/MFCC 1–4/
   flux) stay ungated. Pipeline additions for this: models may set
   `info_` for extra sidecar fields, and the embedding-pattern sidecar
@@ -229,6 +229,20 @@ an audio–text embedding space the way viz2psy's `clip` and word2psy's
   *matched* recalls, the list-recall convention — intrusions don't
   advance it). `speech_timing` summary (latency to first word, speech
   rate, pauses ≥ 0.5 s) lands in the sidecar on every transcribe run.
+- **`speech_gate.py`** — the speech gate for `egemaps`' voiced set and
+  `speech_emotion` (the `GATED_MODELS`), via the `SpeechGated` mixin.
+  Default since 0.20.0 is `diarize`: a window is speech when pyannote turns
+  cover ≥ `GATE_MIN_SPEECH` (0.25) of the model's own window (grid window /
+  4 s context), exact interval math with overlapping turns merged. The
+  pipeline runs `diarize` *before* the frame models (or loads
+  `--speakers`) and sets `model.turns_`. `silero` (mean Silero probability
+  ≥ 0.25, the pre-0.20 gate) stays selectable with `--speech-gate silero`.
+  A diarize-gated model with no turn table is a loud error naming the
+  three fixes, never a silent fallback. Why the default changed: Silero
+  under-calls speech overlapping music or noise (film audio). The
+  thresholds were checked against a human-labelled speech corpus, outside
+  this repo. The CLI imports this module, so it must not import pandas at
+  module level (`test_help_is_fast`).
 - **`metadata.py`** — sidecar builder (version, input, per-model columns +
   runtimes, frames hop/n, transcription config incl. detected language and
   n_speech_segments).
