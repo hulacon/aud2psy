@@ -3,10 +3,12 @@
 opensmile ships in the dev extra and runs fully offline (bundled binaries,
 no weights, no network), so these run in the default suite; each extraction
 test importorskips in case the extra is absent. VAD-bypass tests use the
-FakeVAD from the speech_emotion tests to separate LLD accuracy from gating.
+FakeVAD from the speech_emotion tests to separate LLD accuracy from gating
+(those run the Silero gate); the diarize-gate tests inject a turn table.
 """
 
 import numpy as np
+import pandas as pd
 import pytest
 
 from aud2psy.grid import Grid
@@ -20,7 +22,7 @@ SR = 16000
 
 def make_loaded_model(vad=None):
     pytest.importorskip("opensmile")
-    model = EgemapsModel()
+    model = EgemapsModel(speech_gate="silero")
     model.load()
     if vad is not None:
         model.vad = vad
@@ -91,7 +93,7 @@ def test_pipeline_integration_and_sidecar(wav_factory):
     from aud2psy.pipeline import score_audio
 
     path = wav_factory(sine(220.0, 3.0, sr=SR), sr=SR)
-    res = score_audio(path, ["egemaps"], hop=0.5, show_progress=False)
+    res = score_audio(path, ["egemaps"], hop=0.5, speech_gate="silero", show_progress=False)
     assert list(res.frames_df.columns) == ["time"] + list(RAW_TO_CLEAN.values())
     meta = res.meta["models"]["egemaps"]
     # 25 named columns must be listed, not squashed into an embedding pattern
@@ -100,6 +102,55 @@ def test_pipeline_integration_and_sidecar(wav_factory):
     assert meta["feature_set"] == "eGeMAPSv02"
     assert meta["opensmile_names"]["egemaps_jitter"] == "jitterLocal_sma3nz"
     assert meta["n_gated_windows"] == res.frames_df["egemaps_f0_semitone"].isna().sum()
+    assert meta["speech_gate"] == "silero" and meta["speech_gate_min"] == 0.25
+    assert "speech_gate_turns_source" not in meta
+
+
+def _turns(*spans):
+    return pd.DataFrame({"turn_idx": range(len(spans)), "speaker": "SPEAKER_00",
+                         "onset": [a for a, _ in spans], "offset": [b for _, b in spans]})
+
+
+def test_diarize_gate_follows_turn_coverage():
+    # a voiced tone throughout; turns say only the first 2 s are speech
+    pytest.importorskip("opensmile")
+    model = EgemapsModel()  # diarize is the default gate
+    model.load()
+    assert not hasattr(model, "vad")  # Silero is not loaded for the diarize gate
+    model.turns_ = _turns((0.0, 2.0), (2.0, 2.1))  # 2.0-2.1: 20 % of a window, below .25
+    grid = Grid.for_duration(4.0, 0.5)
+    feats = model.extract(sine(220.0, 4.0, sr=SR), SR, grid)
+    f0 = feats["egemaps_f0_semitone"]
+    assert np.isfinite(f0[:4]).all() and np.isnan(f0[4:]).all()
+    assert np.isfinite(feats["egemaps_loudness"]).all()  # the general set is never gated
+    assert model.info_["speech_gate"] == "diarize"
+    assert model.info_["n_gated_windows"] == 4
+
+
+def test_diarize_gate_without_turns_fails_with_the_fix(wav_factory):
+    pytest.importorskip("opensmile")
+    from aud2psy.exceptions import Aud2PsyError
+    from aud2psy.pipeline import score_audio
+
+    path = wav_factory(sine(220.0, 2.0, sr=SR), sr=SR)
+    with pytest.raises(Aud2PsyError, match="speakers_csv.*speech_gate='silero'"):
+        score_audio(path, ["egemaps"], show_progress=False)
+
+
+def test_pipeline_diarize_gate_from_speakers_csv(wav_factory, tmp_path):
+    pytest.importorskip("opensmile")
+    from aud2psy.pipeline import score_audio
+
+    path = wav_factory(sine(220.0, 3.0, sr=SR), sr=SR)
+    csv = tmp_path / "clip_speakers.csv"
+    _turns((1.0, 3.0)).assign(stimulus_id="clip").to_csv(csv, index=False)
+    res = score_audio(path, ["egemaps"], speakers_csv=csv, show_progress=False)
+    f0 = res.frames_df["egemaps_f0_semitone"]
+    assert f0.isna().tolist() == [True, True, False, False, False, False]
+    meta = res.meta["models"]["egemaps"]
+    assert meta["speech_gate"] == "diarize"
+    assert meta["speech_gate_turns_source"] == str(csv)
+    assert meta["n_gated_windows"] == 2
 
 
 def test_embedding_pattern_detection():

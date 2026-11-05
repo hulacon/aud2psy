@@ -10,10 +10,12 @@ in the README; no new pip deps (torch/transformers are core).
 
 Frame-level: one prediction per grid window from a 4 s context window
 centered on the window midpoint (edge-clamped) — the CLAP window ≫ hop
-pattern at 16 kHz. Windows are VAD-gated: where the context window's
-mean Silero speech probability falls below GATE_MIN_SPEECH the outputs
-are NaN (the pitch/tonal convention — the model emits garbage on music
-and effects). Two caveats for users, both from the source paper: valence
+pattern at 16 kHz. Windows are speech-gated
+(``aud2psy.speech_gate``): where diarized speaker turns cover less than
+GATE_MIN_SPEECH of the context window (or, with ``speech_gate="silero"``,
+the pre-0.20 gate, where its mean Silero speech probability is below it)
+the outputs are NaN (the pitch/tonal convention — the model emits garbage
+on music and effects). Two caveats for users, both from the source paper: valence
 rides partly on implicit linguistic content learned in fine-tuning (so it
 overlaps text sentiment for English speech; arousal/dominance are the
 more purely paralinguistic signals), and background *human* non-speech
@@ -24,13 +26,18 @@ from __future__ import annotations
 
 import numpy as np
 
+from ..speech_gate import (  # noqa: F401  (GATE_MIN_SPEECH, speech_fraction re-exported)
+    DEFAULT_SPEECH_GATE,
+    GATE_MIN_SPEECH,
+    SpeechGated,
+    check_gate,
+    speech_fraction,
+)
 from .base import BaseModel, auto_device, undefined
 
 CHECKPOINT = "audeering/wav2vec2-large-robust-12-ft-emotion-msp-dim"
 WINDOW_SEC = 4.0
 BATCH_SIZE = 8
-GATE_MIN_SPEECH = 0.25  # min mean Silero prob over the context window
-VAD_WINDOW = 512  # samples per Silero probability at 16 kHz
 
 
 def _build_model_class():
@@ -68,21 +75,23 @@ def _build_model_class():
     return EmotionModel
 
 
-class SpeechEmotionModel(BaseModel):
+class SpeechEmotionModel(SpeechGated, BaseModel):
     name = "speech_emotion"
     nulls = {f"speech_emotion_{d}": undefined(
-        "mean Silero speech probability over the context window below GATE_MIN_SPEECH (0.25)")
+        "the context window's speech measure under the run's speech gate (sidecar `speech_gate`: "
+        "diarized-turn coverage, or mean Silero probability) is below GATE_MIN_SPEECH "
+        f"({GATE_MIN_SPEECH})")
         for d in ("arousal", "dominance", "valence")}
     level = "frame"
     input_sr = 16000  # the model's native rate; also what Silero VAD wants
     window_sec = WINDOW_SEC
     checkpoint = CHECKPOINT
 
-    def __init__(self, device: str | None = None):
+    def __init__(self, device: str | None = None, speech_gate: str = DEFAULT_SPEECH_GATE):
         self.device = device or auto_device()
+        self.speech_gate = check_gate(speech_gate)
 
     def load(self) -> None:
-        from faster_whisper.vad import get_vad_model
         from transformers import Wav2Vec2Processor
 
         self.processor = Wav2Vec2Processor.from_pretrained(CHECKPOINT)
@@ -92,7 +101,7 @@ class SpeechEmotionModel(BaseModel):
         except Exception:  # MPS op gaps etc. — fall back rather than fail
             self.device = "cpu"
             self.model = model.to(self.device)
-        self.vad = get_vad_model()
+        self.load_gate()
 
     def unload(self) -> None:
         for attr in ("model", "processor", "vad"):
@@ -100,9 +109,10 @@ class SpeechEmotionModel(BaseModel):
 
     def extract(self, y: np.ndarray, sr: int, grid) -> dict[str, np.ndarray]:
         # (n_windows, 3) in the checkpoint's output order: arousal, dominance, valence
+        gated = self.gate_mask(y, sr, grid.centers, WINDOW_SEC)  # before inference: fail fast
         vals = self.predict_windows(y, sr, grid.centers)
-        gated = speech_fraction(self.vad, y, sr, grid.centers, WINDOW_SEC) < GATE_MIN_SPEECH
         vals[gated] = np.nan
+        self.info_ = self.gate_info(gated, WINDOW_SEC)
         return {
             "speech_emotion_valence": vals[:, 2],
             "speech_emotion_arousal": vals[:, 0],
@@ -138,25 +148,3 @@ def context_windows(
         y[(s := int(min(max(c - half, 0.0), max(duration - window_sec, 0.0)) * sr)) : s + n_win]
         for c in centers
     ]
-
-
-def speech_fraction(
-    vad, y: np.ndarray, sr: int, centers: np.ndarray, window_sec: float
-) -> np.ndarray:
-    """Mean Silero speech probability over each context window."""
-    if sr != 16000:
-        raise ValueError(f"speech_fraction expects 16 kHz audio, got {sr}")
-    y = y.astype(np.float32)
-    pad = (-len(y)) % VAD_WINDOW
-    if pad:
-        y = np.concatenate([y, np.zeros(pad, dtype=np.float32)])
-    probs = np.asarray(vad(y, num_samples=VAD_WINDOW)).ravel()
-    times = (np.arange(len(probs)) + 0.5) * VAD_WINDOW / sr
-    half = window_sec / 2
-    duration = len(y) / sr
-    out = np.empty(len(centers))
-    for i, c in enumerate(centers):
-        start = min(max(c - half, 0.0), max(duration - window_sec, 0.0))
-        m = (times >= start) & (times < start + window_sec)
-        out[i] = probs[m].mean() if m.any() else 0.0
-    return out

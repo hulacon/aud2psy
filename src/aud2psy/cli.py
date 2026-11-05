@@ -9,6 +9,8 @@ from __future__ import annotations
 import argparse
 import sys
 
+from .speech_gate import DEFAULT_SPEECH_GATE, GATED_MODELS, SPEECH_GATES
+
 # name -> (module path, class name, description). Import lazily via pipeline.get_model.
 MODEL_REGISTRY: dict[str, tuple[str, str, str]] = {
     "loudness": ("aud2psy.models.loudness", "LoudnessModel", "RMS energy and dB level"),
@@ -82,8 +84,14 @@ def build_parser() -> argparse.ArgumentParser:
                              "(default: let the pipeline estimate)")
     parser.add_argument("--speakers", default=None, metavar="CSV",
                         help="existing diarize turn table (a *_speakers.csv) for "
-                             "the conversation model, instead of running diarize "
-                             "in the same call")
+                             "the conversation model and the diarize speech gate, "
+                             "instead of running diarize in the same call")
+    parser.add_argument("--speech-gate", choices=SPEECH_GATES, default=DEFAULT_SPEECH_GATE,
+                        help="how egemaps (voiced set) and speech_emotion find speech: "
+                             "'diarize' = speaker turns cover >= 25%% of the window "
+                             "(needs the diarize model or --speakers); 'silero' = mean "
+                             "Silero VAD probability >= .25, the gate before 0.20.0 "
+                             f"(default: {DEFAULT_SPEECH_GATE})")
     parser.add_argument("--words", default=None, metavar="CSV",
                         help="existing word-timestamp table (a "
                              "*_transcript_words.csv) for the speech_rate model, "
@@ -406,6 +414,15 @@ def main(argv: list[str] | None = None) -> int:
                     file=sys.stderr,
                 )
                 models.remove("conversation")
+                if args.speech_gate == "diarize":
+                    print(
+                        "note: skipping egemaps and speech_emotion too (they gate on "
+                        "diarized speech; pass --speakers, or --speech-gate silero)",
+                        file=sys.stderr,
+                    )
+                    for m in GATED_MODELS:
+                        if m in models:
+                            models.remove(m)
         if importlib.util.find_spec("opensmile") is None:
             print(
                 "note: skipping egemaps (optional dependency not installed; "
@@ -433,17 +450,24 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--verbatim selects the CrisperWhisper checkpoint; drop --whisper-model")
     if args.num_speakers and "diarize" not in models:
         parser.error("--num-speakers requires the diarize model")
-    if args.speakers and "conversation" not in models:
-        parser.error("--speakers requires the conversation model")
+    gate_reads_turns = args.speech_gate == "diarize" and any(m in GATED_MODELS for m in models)
+    if args.speakers and "conversation" not in models and not gate_reads_turns:
+        parser.error("--speakers requires the conversation model or a diarize-gated "
+                     f"model ({', '.join(GATED_MODELS)} with --speech-gate diarize)")
     if args.speakers and "diarize" in models:
-        parser.error("--speakers replaces the diarize run as the conversation "
-                     "model's turn source; drop diarize or drop --speakers")
+        parser.error("--speakers replaces the diarize run as the turn source; drop "
+                     "diarize or drop --speakers")
+    if gate_reads_turns and "diarize" not in models and not args.speakers:
+        gated = ", ".join(m for m in models if m in GATED_MODELS)
+        parser.error(f"{gated} gate on diarized speech (--speech-gate diarize, the "
+                     "default since 0.20.0): add the diarize model, pass --speakers "
+                     "existing_speakers.csv, or use --speech-gate silero")
     if "conversation" in models and "diarize" not in models and not args.speakers:
         parser.error("conversation derives from the diarize turn table; add the "
                      "diarize model, or pass --speakers existing_speakers.csv")
     if args.speakers and len(input_paths) > 1:
         parser.error("--speakers maps one turn table onto one input; with several "
-                     "inputs run conversation together with diarize instead")
+                     "inputs run diarize in the same call instead")
     if args.words and "speech_rate" not in models:
         parser.error("--words requires the speech_rate model")
     if args.words and "transcribe" in models:
@@ -507,6 +531,7 @@ def main(argv: list[str] | None = None) -> int:
                 clap_model=args.clap_model,
                 num_speakers=args.num_speakers,
                 verbatim=args.verbatim,
+                speech_gate=args.speech_gate,
             )
         except Aud2PsyError as exc:
             print(f"error: {exc}", file=sys.stderr)
@@ -533,6 +558,7 @@ def main(argv: list[str] | None = None) -> int:
             speakers_csv=args.speakers,
             words_csv=args.words,
             verbatim=args.verbatim,
+            speech_gate=args.speech_gate,
         )
     except Aud2PsyError as exc:
         print(f"error: {exc}", file=sys.stderr)

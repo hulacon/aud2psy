@@ -88,8 +88,8 @@ speaker-identity tracking, use the `diarize` model (below).
 | `ebind_audio` | frame | 1024 | `ebind_audio_0000`…`ebind_audio_1023`: EBind audio-arm embeddings (`encord-team/ebind-full`; ImageBind audio trunk projected into the Perception Encoder space), in one shared 1024-d space with viz2psy `ebind` images and word2psy `ebind_text` text (2 s windows; weights CC-BY-NC-SA 4.0, see below) |
 | `music_emotion` | frame | 2 | `music_emotion_valence`, `music_emotion_arousal` in [−1, 1]: DEAM-trained probe on CLAP embeddings. Discriminates affective levels between clips/sections (held-out song-level r = .71/.84); not a beat-to-beat tracker |
 | `sound_events` | frame | 16 | `sound_events_speech`, `_music`, `_singing`, `_laughter`, `_crying`, `_shouting`, `_crowd`, `_applause`, `_footsteps`, `_vehicle`, `_water`, `_wind`, `_animals`, `_gunshot_explosion`, `_siren_alarm`, `_thunder`: zero-shot cosine scores of each 10 s window against a text prompt bank in the CLAP space (see below) |
-| `speech_emotion` | frame | 3 | `speech_emotion_valence`, `_arousal`, `_dominance` (~0–1): vocal affect from [audeering's wav2vec2 MSP-Podcast model](https://huggingface.co/audeering/wav2vec2-large-robust-12-ft-emotion-msp-dim) in 4 s windows; NaN where the window isn't speech (Silero-gated). Weights are CC-BY-NC-SA (research use) |
-| `egemaps` | frame | 25 | the 25 [eGeMAPS](https://audeering.github.io/opensmile/) v02 low-level descriptors via openSMILE: `egemaps_loudness`, spectral balance (`_alpha_ratio`, `_hammarberg`, `_slope_0_500`, `_slope_500_1500`, `_flux`), `_mfcc1`–`4`, and a voiced set (`_f0_semitone`, `_jitter`, `_shimmer`, `_hnr`, `_h1_h2`, `_h1_a3`, formant `_f1/f2/f3_freq/_bw/_amp`) that is NaN off-speech (Silero-gated); needs `pip install "aud2psy[egemaps]"` |
+| `speech_emotion` | frame | 3 | `speech_emotion_valence`, `_arousal`, `_dominance` (~0–1): vocal affect from [audeering's wav2vec2 MSP-Podcast model](https://huggingface.co/audeering/wav2vec2-large-robust-12-ft-emotion-msp-dim) in 4 s windows; NaN where the window isn't speech ([speech gate](#speech-gate)). Weights are CC-BY-NC-SA (research use) |
+| `egemaps` | frame | 25 | the 25 [eGeMAPS](https://audeering.github.io/opensmile/) v02 low-level descriptors via openSMILE: `egemaps_loudness`, spectral balance (`_alpha_ratio`, `_hammarberg`, `_slope_0_500`, `_slope_500_1500`, `_flux`), `_mfcc1`–`4`, and a voiced set (`_f0_semitone`, `_jitter`, `_shimmer`, `_hnr`, `_h1_h2`, `_h1_a3`, formant `_f1/f2/f3_freq/_bw/_amp`) that is NaN off-speech ([speech gate](#speech-gate)); needs `pip install "aud2psy[egemaps]"` |
 | `conversation` | frame | 6 | `conversation_n_speakers` (distinct speakers active in the window), `_speech_fraction`, `_overlap_fraction` (≥ 2 concurrent speakers — crosstalk), `_turn_rate`, `_switch_rate` (turn onsets / speaker changes per second), `_turn_duration` (time-weighted mean active-turn duration, s; NaN in silence) — derived from the `diarize` turn table, no audio model of its own (see below) |
 | `speech_rate` | frame | 3 | `speech_rate_words` (word onsets/s), `_word_duration` (time-weighted mean active-word duration, s; NaN where no word — the local articulation proxy), `_pauses` (within-utterance silent pauses/s, gap in [0.15, 2.0) s) — derived from the `transcribe` word timestamps; run with `transcribe`, or point at an existing table via `--words old_transcript_words.csv` |
 | `beats` | events | — | beat/downbeat table (`time`, `is_downbeat`) via [beat_this](https://github.com/CPJKU/beat_this); needs `pip install "aud2psy[beats]"` |
@@ -158,6 +158,30 @@ sound (crowds, babble) is its worst-case interference. The weights are
 CC-BY-NC-SA 4.0 — free for research; commercial use needs a license from
 audEERING.
 
+## Speech gate
+
+`egemaps`' voiced set and `speech_emotion` are NaN on windows that are not
+speech. Two gates decide that, chosen per call with `--speech-gate`:
+
+| gate | a window is speech when | needs |
+|---|---|---|
+| `diarize` (default since 0.20.0) | pyannote speaker turns cover ≥ 25 % of it | `diarize` in the same call, or `--speakers {stem}_speakers.csv` |
+| `silero` (the gate before 0.20.0) | its mean Silero VAD speech probability is ≥ 0.25 | nothing extra |
+
+The window is each model's own: the grid window for `egemaps`, the 4 s
+context window for `speech_emotion`. Silero under-calls speech that overlaps
+music or background noise, the usual case in film audio; diarized turns keep
+those windows, at the cost of also firing on some non-speech vocal sound
+(laughter, singing). A gated model run without a turn table fails rather
+than falling back, so one command always gates one way. The sidecar records
+the gate, its turn source and the number of gated windows.
+
+```bash
+aud2psy diarize egemaps speech_emotion film.mp4 -o out/film.csv
+aud2psy egemaps film.mp4 --speakers out/film_speakers.csv -o out/film_eg.csv
+aud2psy egemaps film.mp4 --speech-gate silero -o out/film_eg.csv
+```
+
 ## Interpretable prosody (egemaps)
 
 Where `speech_emotion` gives model *judgments* of vocal affect, `egemaps`
@@ -169,14 +193,15 @@ frame grid.
 
 ```bash
 pip install "aud2psy[egemaps]"
-aud2psy egemaps clip.mp4 -o scores.csv
+aud2psy diarize egemaps clip.mp4 -o scores.csv     # or: --speech-gate silero
 ```
 
 Two NaN conventions keep the columns honest. Pitch-dependent measures
 (F0, jitter, shimmer, HNR, H1–H2, H1–A3) are NaN on unvoiced frames (the
 `pitch_f0` convention). And the whole voiced set — including formants —
-is NaN wherever a window isn't speech (Silero-gated, the `speech_emotion`
-threshold): "jitter" measured on a violin line is not voice quality. The
+is NaN wherever a window isn't speech (the [speech gate](#speech-gate),
+shared with `speech_emotion`): "jitter" measured on a violin line is not
+voice quality. The
 general-audio columns (loudness, spectral balance, MFCCs, flux) are
 computed everywhere. The sidecar records each column's original openSMILE
 name.
@@ -403,7 +428,7 @@ models you used:
 - **Key profiles** (`tonal`): Krumhansl, C. L., & Kessler, E. J. (1982). Tracing the dynamic changes in perceived tonal organization in a spatial representation of musical keys. *Psychological Review, 89*(4), 334–368. [doi:10.1037/0033-295X.89.4.334](https://doi.org/10.1037/0033-295X.89.4.334)
 - **Section novelty** (`rhythm`): Foote, J. (2000). Automatic audio segmentation using a measure of audio novelty. *ICME 2000*. [doi:10.1109/ICME.2000.869637](https://doi.org/10.1109/ICME.2000.869637). The tonal/rhythm/timbre regressor set follows the naturalistic music-fMRI canon of Alluri, V., et al. (2012). Large-scale brain networks emerge from dynamic processing of musical timbre, key and rhythm. *NeuroImage, 59*(4), 3677–3689. [doi:10.1016/j.neuroimage.2011.11.019](https://doi.org/10.1016/j.neuroimage.2011.11.019)
 - **Psychoacoustics** (`psychoacoustic`): computed with [MoSQITo](https://github.com/Eomys/MoSQITo). Loudness: ISO 532-1:2017 (Zwicker). Sharpness: DIN 45692:2009. Roughness: Daniel, P., & Weber, R. (1997). Psychoacoustical roughness: Implementation of an optimized model. *Acta Acustica, 83*(1), 113–123. Fluctuation-strength estimate follows Fastl, H., & Zwicker, E. (2007). *Psychoacoustics: Facts and models* (3rd ed.). Springer.
-- **Silero VAD** (`speech`, and the speech gating in `speech_emotion`/`egemaps`): Silero Team (2021). Silero VAD: Pre-trained enterprise-grade voice activity detector (software). [github.com/snakers4/silero-vad](https://github.com/snakers4/silero-vad)
+- **Silero VAD** (`speech`, and the `silero` speech gate for `speech_emotion`/`egemaps`): Silero Team (2021). Silero VAD: Pre-trained enterprise-grade voice activity detector (software). [github.com/snakers4/silero-vad](https://github.com/snakers4/silero-vad)
 - **LAION-CLAP** (`clap`, `sound_events`, and the embedding basis of `music_emotion`): Wu, Y., Chen, K., Zhang, T., Hui, Y., Berg-Kirkpatrick, T., & Dubnov, S. (2023). Large-scale contrastive language-audio pretraining with feature fusion and keyword-to-caption augmentation. *ICASSP 2023*. [arXiv:2211.06687](https://arxiv.org/abs/2211.06687)
 - **EBind** (`ebind_audio`): Broadbent, J., Cohen, F., Hvilshøj, F., Landau, E., & Sasoglu, E. (2025). EBind: A practical approach to space binding. [arXiv:2511.14229](https://arxiv.org/abs/2511.14229). Its audio trunk comes from ImageBind: Girdhar, R., et al. (2023). ImageBind: One embedding space to bind them all. *CVPR 2023*. [arXiv:2305.05665](https://arxiv.org/abs/2305.05665)
 - **DEAM** (the training data of `music_emotion`'s probe): Aljanaki, A., Yang, Y.-H., & Soleymani, M. (2017). Developing a benchmark for emotional analysis of music. *PLoS ONE, 12*(3), e0173392. [doi:10.1371/journal.pone.0173392](https://doi.org/10.1371/journal.pone.0173392)
