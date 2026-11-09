@@ -28,6 +28,8 @@ from aud2psy.models.base import (
     LABEL_KEYS,
     NEEDS_DERIVED_FROM,
     SOURCE_VALIDATION_KEYS,
+    WINDOW_ALIGNS,
+    WINDOW_TOKENS,
     resolve_label,
 )
 from aud2psy.pipeline import save_result, score_audio
@@ -203,7 +205,7 @@ def test_offline_inventory_matches_a_real_run(wav_factory, tmp_path):
                          show_progress=False)
     written = save_result(result, tmp_path / "fam.csv")
     meta = json.loads(written["meta"].read_text())
-    assert meta["schema_version"] == SCHEMA_VERSION == "1.2"
+    assert meta["schema_version"] == SCHEMA_VERSION == "1.4"
     for m in OFFLINE:
         entry = meta["models"][m]
         assert entry["columns"] == inventory(m), m
@@ -253,7 +255,7 @@ class TestRefresh:
         before = w["frames"].read_bytes()
         assert refresh_sidecar(w["meta"]).status == "refreshed"
         meta = json.loads(w["meta"].read_text())
-        assert meta["schema_version"] == "1.2"
+        assert meta["schema_version"] == SCHEMA_VERSION
         assert meta["models"]["pitch"]["labels"] == {
             "default": declared_labels("pitch")["default"],
             "columns": declared_labels("pitch")["columns"]}
@@ -271,3 +273,101 @@ class TestRefresh:
         assert refresh_sidecar(w["meta"]).status == "refreshed"
         meta = json.loads(w["meta"].read_text())
         assert meta["models"]["onsets"]["labels"]["default"]["derivation"] == "formula"
+
+
+# ---- schema 1.4: per-column window labels --------------------------------------------------
+
+def _is_frame(model: str) -> bool:
+    return model_class(model).level == "frame"
+
+
+@pytest.mark.parametrize("model", sorted(MODEL_REGISTRY))
+def test_window_labels_have_the_contract_shape(model):
+    """Every column of a frame model declares its window; other levels declare none.
+
+    A missing key would read as "no window" downstream, which is the failure the
+    1.4 labels exist to prevent, so absence is never allowed on a frame model.
+    """
+    labels = declared_labels(model)
+    for col in inventory(model):
+        label = resolve_label(labels, col)
+        if not _is_frame(model):
+            assert "window_sec" not in label and "window_align" not in label, (model, col)
+            continue
+        assert "window_sec" in label, (model, col)
+        w = label["window_sec"]
+        if isinstance(w, str):
+            assert w in WINDOW_TOKENS, (model, col, w)
+            assert "window_align" not in label, (model, col)
+        else:
+            assert isinstance(w, (int, float)) and not isinstance(w, bool) and w > 0, (model, col, w)
+            assert label.get("window_align") in WINDOW_ALIGNS, (model, col)
+
+
+@pytest.mark.parametrize("model", sorted(MODEL_REGISTRY))
+def test_model_level_window_matches_the_columns(model):
+    """The 1.0 model-level ``window_sec`` is set exactly when all columns share one number."""
+    if not _is_frame(model):
+        assert model_class(model).window_sec is None
+        return
+    labels = declared_labels(model)
+    windows = {resolve_label(labels, col)["window_sec"] for col in inventory(model)}
+    shared = next(iter(windows)) if len(windows) == 1 else None
+    expected = shared if isinstance(shared, (int, float)) else None
+    assert model_class(model).window_sec == expected, (model, windows)
+
+
+def test_window_audit_points():
+    """The Contract B 1.4 windows, read from the code's own constants."""
+    def win(model, col):
+        label = resolve_label(declared_labels(model), col)
+        return label["window_sec"], label.get("window_align")
+
+    assert win("clap", "clap_000") == (10.0, "centred")
+    assert win("music_emotion", "music_emotion_valence") == (10.0, "centred")
+    assert win("ebind_audio", "ebind_audio_0000") == (2.0, "centred")
+    assert win("speech_emotion", "speech_emotion_arousal") == (4.0, "centred")
+    assert win("tonal", "tonal_majorness") == (3.0, "centred")
+    assert win("rhythm", "rhythm_pulse_clarity") == (3.0, "centred")
+    assert win("rhythm", "rhythm_beat_strength") == (8.92, "centred")  # 384 frames x 512 / 22050
+    assert win("rhythm", "rhythm_novelty") == (4.0, "centred")
+    assert win("onsets", "onsets_tempo") == (8.0, "centred")
+    assert win("onsets", "onsets_rate") == ("grid", None)
+    assert win("psychoacoustic", "psychoacoustic_fluctuation") == (2.0, "centred")
+    assert win("psychoacoustic", "psychoacoustic_roughness") == ("grid", None)
+    assert win("conversation", "conversation_turn_duration") == ("event", None)
+    assert win("conversation", "conversation_turn_rate") == ("grid", None)
+    assert win("speech_rate", "speech_rate_pauses") == ("event", None)
+    assert win("loudness", "loudness_db") == ("grid", None)
+
+
+def test_window_constants_are_the_ones_the_code_runs():
+    """The label constants are the ones passed to librosa, not copies of them."""
+    import inspect
+
+    from aud2psy.models import onsets, rhythm
+
+    assert "ac_size=TEMPO_AC_SEC" in inspect.getsource(onsets.OnsetsModel.extract)
+    assert "min(PLP_WIN_FRAMES, len(oenv))" in inspect.getsource(rhythm.RhythmModel.extract)
+
+
+def test_refresh_stamps_model_level_windows(wav_factory, tmp_path):
+    """A pre-1.4 tonal sidecar gains window_sec 3.0 and the per-column window labels."""
+    result = score_audio(wav_factory(sine(220, 4.0)), ["tonal", "loudness"], show_progress=False)
+    written = save_result(result, tmp_path / "fam.csv")
+    meta = json.loads(written["meta"].read_text())
+    assert meta["models"]["tonal"]["window_sec"] == 3.0
+    assert "window_sec" not in meta["models"]["loudness"]
+    meta["schema_version"] = "1.2"
+    meta["models"]["tonal"].pop("window_sec")
+    for entry in meta["models"].values():
+        entry["labels"]["default"].pop("window_sec", None)
+        entry["labels"]["default"].pop("window_align", None)
+    written["meta"].write_text(json.dumps(meta, indent=2))
+    assert refresh_sidecar(written["meta"]).status == "refreshed"
+    meta = json.loads(written["meta"].read_text())
+    assert meta["schema_version"] == SCHEMA_VERSION
+    assert meta["models"]["tonal"]["window_sec"] == 3.0
+    assert meta["models"]["tonal"]["labels"]["default"]["window_align"] == "centred"
+    assert meta["models"]["loudness"]["labels"]["default"]["window_sec"] == "grid"
+    assert "models.*.window_sec" in meta["refreshed"][-1]["fields"]

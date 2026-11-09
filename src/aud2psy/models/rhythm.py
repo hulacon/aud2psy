@@ -23,10 +23,14 @@ from __future__ import annotations
 
 import numpy as np
 
+from ..audio import FEATURE_SR
 from .base import BaseModel, undefinable_trailing
 
 HOP_LENGTH = 512
 WINDOW_SEC = 3.0
+PLP_WIN_FRAMES = 384  # librosa.beat.plp win_length (onset-envelope frames)
+# the PLP window in seconds at the feature rate, as declared in the labels
+PLP_WINDOW_SEC = round(PLP_WIN_FRAMES * HOP_LENGTH / FEATURE_SR, 2)
 LAG_MIN_SEC = 0.25  # 240 BPM
 LAG_MAX_SEC = 2.0  # 30 BPM
 MIN_ONSET_ACTIVITY = 0.1  # log-mel flux units; real onsets are >= ~1
@@ -53,13 +57,16 @@ class RhythmModel(BaseModel):
         "default": {"interpretability": "nameable", "derivation": "formula"},
         "columns": {
             "rhythm_pulse_clarity": {
+                "window_sec": WINDOW_SEC, "window_align": "centred",
                 "LongName": "Pulse clarity",
                 "Description": "Salience of the strongest beat-range periodicity (30-240 BPM) in "
                                "the mean-removed onset envelope's autocorrelation, 3 s window"},
             "rhythm_beat_strength": {
+                "window_sec": PLP_WINDOW_SEC, "window_align": "centred",
                 "LongName": "Beat strength",
                 "Description": "Window maximum of the predominant-local-pulse curve"},
             "rhythm_novelty": {
+                "window_sec": NOVELTY_KERNEL_SEC, "window_align": "centred",
                 "LongName": "Structural novelty",
                 "Description": "Foote checkerboard novelty on an MFCC self-similarity matrix "
                                "(texture change)"},
@@ -88,7 +95,7 @@ class RhythmModel(BaseModel):
 
         plp = librosa.beat.plp(
             onset_envelope=oenv, sr=sr, hop_length=HOP_LENGTH,
-            win_length=min(384, len(oenv)),
+            win_length=min(PLP_WIN_FRAMES, len(oenv)),
         )
 
         novelty, novelty_times = self._novelty(y, sr)

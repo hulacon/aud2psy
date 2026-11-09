@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.0] - 2026-11-08
+
+Minor release. No output values change, so nothing needs re-extracting:
+`aud2psy sidecar refresh` brings existing sidecars to 1.4.
+
+### Added
+
+- **Contract B schema 1.4 (window labels):** every column of a frame-level
+  model now declares, in its `labels`, how much audio around the row its value
+  reads (constellation-contracts §4.1). `window_sec` is a number of seconds
+  when the column reads more than the grid step, `"grid"` when the row reads
+  only its own grid window, or `"event"` when the value depends on the whole
+  extent of an input event (a diarised turn, a transcribed word) that can
+  reach past the row. Numeric windows also carry `window_align`: `"centred"`
+  (every window in aud2psy today; clamped at clip edges) or `"trailing"`.
+  Context inside an upstream model (Silero's state, pyannote's segmentation,
+  Whisper's 30 s) is not counted. Segment and event models declare no window.
+  `schema_version` is now `"1.4"` (1.3 is viz2psy's video framing record).
+  - Windowed columns beyond the ones already declared at model level:
+    `tonal` (3 s, all columns), `rhythm_pulse_clarity` (3 s),
+    `rhythm_beat_strength` (8.92 s: 384 onset frames at 22.05 kHz),
+    `rhythm_novelty` (4 s kernel), `onsets_tempo` (8 s autocorrelation),
+    `psychoacoustic_fluctuation` (2 s). `conversation_turn_duration`,
+    `conversation_switch_rate`, `speech_rate_word_duration` and
+    `speech_rate_pauses` are `"event"`.
+- `metadata.stamp_windows`: `sidecar refresh` stamps the model-level
+  `window_sec` (the 1.0 key) from the model class, so a refreshed sidecar
+  carries it exactly when every column shares one numeric window (extraction
+  already writes it from the running model). `tonal` now sets it
+  (3.0); before 0.22.0 tonal sidecars claimed no window.
+
+### Changed
+
+- `onsets` passes `ac_size=TEMPO_AC_SEC` (8.0, librosa's default) and
+  `rhythm` passes `win_length=PLP_WIN_FRAMES` (384, the literal it used), so
+  the declared windows and the computation share one constant. Values are
+  unchanged.
+- `sidecar refresh` also stamps `models.*.window_sec` (recorded in
+  `refreshed[].fields`).
+
 ## [0.21.0] - 2026-11-05
 
 Minor release. No output values change, so nothing needs re-extracting:

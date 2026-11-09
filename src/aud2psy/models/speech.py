@@ -34,6 +34,7 @@ class SpeechModel(BaseModel):
     level = "frame"
     labels = {
         "default": {
+            "window_sec": "grid",
             "interpretability": "nameable",
             "derivation": "trained-on-labels",
             "LongName": "Speech probability",

@@ -85,6 +85,7 @@ class SpeechEmotionModel(SpeechGated, BaseModel):
     level = "frame"
     labels = {
         "default": {
+            "window_sec": WINDOW_SEC, "window_align": "centred",
             "interpretability": "nameable",
             "derivation": "trained-on-labels",
         },

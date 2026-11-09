@@ -52,6 +52,7 @@ import numpy as np
 
 from .base import undefined
 from .clap import DEFAULT_CHECKPOINT, SILENCE_DBFS, ClapModel, silent_windows
+from .clap import WINDOW_SEC as CLAP_WINDOW_SEC
 
 # category -> prompt ensemble. Keys become columns: sound_events_<key>.
 PROMPT_BANK: dict[str, list[str]] = {
@@ -94,6 +95,7 @@ class SoundEventsModel(ClapModel):
     level = "frame"
     labels = {
         "default": {
+            "window_sec": CLAP_WINDOW_SEC, "window_align": "centred",
             "interpretability": "nameable",
             "derivation": "zero-shot",
             "derived_from": DEFAULT_CHECKPOINT,

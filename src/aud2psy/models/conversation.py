@@ -49,6 +49,7 @@ class ConversationModel(BaseModel):
     level = "frame"
     labels = {
         "default": {
+            "window_sec": "grid",
             "interpretability": "nameable",
             "derivation": "formula-on-model",
             "derived_from": DEFAULT_PIPELINE,
@@ -63,9 +64,11 @@ class ConversationModel(BaseModel):
             "conversation_turn_rate": {
                 "Description": "Turn onsets per second", "Units": "Hz"},
             "conversation_switch_rate": {
+                "window_sec": "event",
                 "Description": "Onsets per second of turns whose speaker differs from the "
                                "preceding turn's", "Units": "Hz"},
             "conversation_turn_duration": {
+                "window_sec": "event",
                 "Description": "Time-weighted mean duration of the turns active in the window",
                 "Units": "s"},
         },

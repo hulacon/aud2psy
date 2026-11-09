@@ -87,7 +87,8 @@ class EgemapsModel(SpeechGated, BaseModel):
     }
     level = "frame"
     labels = {
-        "default": {"interpretability": "nameable", "derivation": "formula"},
+        "default": {"interpretability": "nameable", "derivation": "formula",
+                    "window_sec": "grid"},
         "columns": {
             **{f"egemaps_mfcc{i}": {
                 "interpretability": "opaque",

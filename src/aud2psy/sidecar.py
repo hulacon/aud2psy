@@ -24,7 +24,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .exceptions import Aud2PsyError
-from .metadata import SCHEMA_VERSION, stamp_labels, stamp_nulls
+from .metadata import SCHEMA_VERSION, stamp_labels, stamp_nulls, stamp_windows
 
 
 @dataclass
@@ -87,6 +87,7 @@ def refresh_sidecar(path: str | Path, *, dry_run: bool = False) -> RefreshResult
     new = copy.deepcopy(meta)
     stamp_nulls(new["models"])
     stamp_labels(new["models"])
+    stamp_windows(new["models"])
     undeclared = {
         name: sorted(cols - set(new["models"][name]["nulls"]))
         for name, cols in _nan_columns(path, new).items()
@@ -103,7 +104,7 @@ def refresh_sidecar(path: str | Path, *, dry_run: bool = False) -> RefreshResult
     new.setdefault("refreshed", []).append({
         "by": f"aud2psy {__version__}",
         "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "fields": ["schema_version", "models.*.nulls", "models.*.labels"],
+        "fields": ["schema_version", "models.*.nulls", "models.*.labels", "models.*.window_sec"],
         "from_schema_version": meta.get("schema_version"),
     })
     if not dry_run:

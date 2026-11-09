@@ -25,7 +25,8 @@ class PitchModel(BaseModel):
     }
     level = "frame"
     labels = {
-        "default": {"interpretability": "nameable", "derivation": "formula"},
+        "default": {"interpretability": "nameable", "derivation": "formula",
+                    "window_sec": "grid"},
         "columns": {
             "pitch_f0": {
                 "LongName": "Fundamental frequency",

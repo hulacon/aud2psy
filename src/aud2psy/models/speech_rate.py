@@ -47,6 +47,7 @@ class SpeechRateModel(BaseModel):
     level = "frame"
     labels = {
         "default": {
+            "window_sec": "grid",
             "interpretability": "nameable",
             "derivation": "formula-on-model",
             "derived_from": DEFAULT_WHISPER_MODEL,
@@ -55,9 +56,11 @@ class SpeechRateModel(BaseModel):
             "speech_rate_words": {
                 "Description": "Transcribed word onsets per second", "Units": "Hz"},
             "speech_rate_word_duration": {
+                "window_sec": "event",
                 "Description": "Time-weighted mean duration of the words active in the window",
                 "Units": "s"},
             "speech_rate_pauses": {
+                "window_sec": "event",
                 "Description": f"Within-utterance pauses per second (gaps between words of "
                                f"{MIN_PAUSE_SEC:g} to {MAX_PAUSE_SEC:g} s)", "Units": "Hz"},
         },

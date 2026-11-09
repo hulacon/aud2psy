@@ -7,6 +7,9 @@ import numpy as np
 from .base import BaseModel, undefinable_trailing
 
 HOP_LENGTH = 512
+# librosa.feature.tempo autocorrelation window (s); librosa's default, named so the
+# window label and the call share one constant
+TEMPO_AC_SEC = 8.0
 
 
 class OnsetsModel(BaseModel):
@@ -14,7 +17,8 @@ class OnsetsModel(BaseModel):
     nulls = undefinable_trailing("onsets_strength", "onsets_tempo")  # onsets_rate counts: never NaN
     level = "frame"
     labels = {
-        "default": {"interpretability": "nameable", "derivation": "formula"},
+        "default": {"interpretability": "nameable", "derivation": "formula",
+                    "window_sec": "grid"},
         "columns": {
             "onsets_strength": {
                 "LongName": "Onset strength",
@@ -24,6 +28,7 @@ class OnsetsModel(BaseModel):
                 "Description": "Detected onsets per second in the grid window",
                 "Units": "Hz"},
             "onsets_tempo": {
+                "window_sec": TEMPO_AC_SEC, "window_align": "centred",
                 "LongName": "Local tempo",
                 "Description": "librosa frame-wise tempo estimate from the onset envelope",
                 "Units": "BPM"},
@@ -39,7 +44,7 @@ class OnsetsModel(BaseModel):
             onset_envelope=oenv, sr=sr, hop_length=HOP_LENGTH, units="time"
         )
         tempo = librosa.feature.tempo(
-            onset_envelope=oenv, sr=sr, hop_length=HOP_LENGTH, aggregate=None
+            onset_envelope=oenv, sr=sr, hop_length=HOP_LENGTH, ac_size=TEMPO_AC_SEC, aggregate=None
         )
         tempo = np.asarray(tempo).ravel()
         if tempo.size == 1:  # librosa collapsed to a global estimate
