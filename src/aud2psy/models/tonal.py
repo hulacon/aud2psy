@@ -46,8 +46,10 @@ class TonalModel(BaseModel):
                           trailing=True)
              for c in ("tonal_key_clarity", "tonal_majorness", "tonal_chroma_entropy")}
     level = "frame"
+    window_sec = WINDOW_SEC  # every column shares the 3 s chroma window
     labels = {
-        "default": {"interpretability": "nameable", "derivation": "formula"},
+        "default": {"interpretability": "nameable", "derivation": "formula",
+                    "window_sec": WINDOW_SEC, "window_align": "centred"},
         "columns": {
             "tonal_key_clarity": {
                 "LongName": "Key clarity",

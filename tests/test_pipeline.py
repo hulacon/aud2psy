@@ -54,7 +54,7 @@ def test_save_result_file_layout(wav_factory, tmp_path):
     assert written["frames"].name == "scores_frames.csv"
     assert written["meta"].name == "scores.meta.json"
     meta = json.loads(written["meta"].read_text())
-    assert meta["schema_version"] == "1.2"
+    assert meta["schema_version"] == "1.4"
     assert meta["extractor"] == "aud2psy"
     assert meta["extractor_version"] == meta["aud2psy_version"]  # legacy key kept
     assert meta["input"]["duration_sec"] == 2.0
@@ -147,6 +147,7 @@ def test_window_sec_declared_where_context_exceeds_the_hop():
         "music_emotion": 10.0,  # same
         "ebind_audio": 2.0,
         "speech_emotion": 4.0,
+        "tonal": 3.0,  # every column shares the 3 s chroma window (declared from 0.22.0)
     }
     for name, (module_path, class_name, _) in MODEL_REGISTRY.items():
         cls = getattr(importlib.import_module(module_path), class_name)

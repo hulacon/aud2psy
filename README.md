@@ -55,8 +55,15 @@ schema 1.1): which of its columns can be NaN and what that means — e.g.
 its value is computed (`formula`, `formula-on-model`, `trained-on-labels`,
 `probe`, `zero-shot`, `embedding` or `bookkeeping`), with the parent
 checkpoint (`derived_from`) for computed-on-a-model columns and BIDS-style
-`LongName` / `Description` / `Units` where they apply. `aud2psy sidecar
-refresh DIR` brings older sidecars up to date without touching a CSV.
+`LongName` / `Description` / `Units` where they apply. On frame-level models
+the labels also say how much audio each row's value reads (schema 1.4):
+`window_sec` is a number of seconds with `window_align` (`centred` today) when
+the column reads past its own 0.5 s window (CLAP's 10 s, tonal's 3 s, the
+8 s tempo estimate), `"grid"` when it does not, and `"event"` when the value
+depends on a whole diarised turn or transcribed word. Adjacent rows of a
+windowed column share most of their audio, so treat them as smoothed, not as
+independent samples. `aud2psy sidecar refresh DIR` brings older sidecars up to
+date without touching a CSV.
 
 A wordless clip produces a zero-row transcript and `n_speech_segments: 0`
 in the sidecar — an explicit result, not an error.

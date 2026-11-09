@@ -30,6 +30,7 @@ import numpy as np
 
 from .base import undefined
 from .clap import DEFAULT_CHECKPOINT, SILENCE_DBFS, ClapModel, silent_windows
+from .clap import WINDOW_SEC as CLAP_WINDOW_SEC
 
 PROBE_RESOURCE = "music_emotion_probe.npz"
 PROVENANCE_RESOURCE = "music_emotion_probe.json"
@@ -75,6 +76,7 @@ class MusicEmotionModel(ClapModel):
     level = "frame"
     labels = {
         "default": {
+            "window_sec": CLAP_WINDOW_SEC, "window_align": "centred",
             "interpretability": "nameable",
             "derivation": "probe",
             "derived_from": DEFAULT_CHECKPOINT,

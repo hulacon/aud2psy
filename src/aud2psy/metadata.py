@@ -41,7 +41,7 @@ def get_model_version(model_name: str) -> str:
     return fallback or "unknown"
 
 
-SCHEMA_VERSION = "1.2"  # Contract B §4.1 extractor output convention
+SCHEMA_VERSION = "1.4"  # Contract B §4.1 extractor output convention (1.3 is video-only)
 
 
 def model_class(model_name: str) -> type:
@@ -85,6 +85,24 @@ def stamp_nulls(model_meta: dict) -> dict:
             emitted = set(entry["columns"])
             declared = {c: e for c, e in declared.items() if c in emitted}
         entry["nulls"] = declared
+    return model_meta
+
+
+def stamp_windows(model_meta: dict) -> dict:
+    """Set (or remove) each model entry's model-level ``window_sec`` from its class.
+
+    The model-level key is the 1.0 convention: present exactly when every
+    column shares one numeric window (``BaseModel.window_sec``). The per-column
+    truth is in ``labels`` (schema 1.4). Applied by ``sidecar refresh``;
+    extraction writes the key from the running model instance. The window is
+    a constant of the code, like the labels.
+    """
+    for name, entry in model_meta.items():
+        w = model_class(name).window_sec
+        if w is None:
+            entry.pop("window_sec", None)
+        else:
+            entry["window_sec"] = float(w)
     return model_meta
 
 

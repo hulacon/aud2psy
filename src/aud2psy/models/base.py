@@ -47,7 +47,20 @@ DERIVATIONS = ("formula", "formula-on-model", "trained-on-labels", "probe", "zer
                "embedding", "bookkeeping")
 NEEDS_DERIVED_FROM = frozenset({"formula-on-model", "probe", "zero-shot"})
 LABEL_KEYS = frozenset({"interpretability", "derivation", "derived_from", "source_validation",
+                        "window_sec", "window_align",
                         "LongName", "Description", "Units", "Levels", "TermURL"})
+# Contract B §4.1 (schema 1.4) window labels, required on every column of a
+# frame-level model. ``window_sec`` is the span of audio, around the row, that
+# this model's own computation reads for the column: a number of seconds when
+# that exceeds the grid step; "grid" when the row reads only its own grid
+# window; "event" when the value depends on the whole extent of an input event
+# (a diarised turn, a transcribed word) that can reach past the row. Context
+# held inside an upstream model (Silero's state, pyannote's segmentation
+# windows, Whisper's 30 s) is not counted. ``window_align`` is required exactly
+# when ``window_sec`` is a number: "centred" (on the row's centre, clamped to
+# the clip) or "trailing" (ending at the row's end).
+WINDOW_TOKENS = ("grid", "event")
+WINDOW_ALIGNS = ("centred", "trailing")
 SOURCE_VALIDATION_KEYS = frozenset({"citation", "eval_dataset", "metric", "value"})
 
 
@@ -77,9 +90,11 @@ class BaseModel:
     # row saw only its own [k*hop, (k+1)*hop) window. Recorded per model in
     # the sidecar so a consumer can tell how much smoothing is baked in --
     # Contract B 4.1 requires time-resolved tables to state their semantics.
-    # Set it only when EVERY column of the model shares one context window;
-    # a window used by a single feature (psychoacoustic's modulation-spectrum
-    # window, say) is a per-feature detail and does not belong here.
+    # Set it only when EVERY column of the model shares one context window
+    # (the 1.0 model-level key). Every column's own window, including one
+    # used by a single feature (psychoacoustic's modulation-spectrum window,
+    # say), is declared in ``labels`` (schema 1.4: ``window_sec`` /
+    # ``window_align``); tests/test_labels.py checks the two agree.
     window_sec: float | None = None
     # Contract B §4.1: exact architecture+weights identifier for any model
     # with learned parameters (e.g. "laion/larger_clap_music_and_speech");

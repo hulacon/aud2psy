@@ -121,7 +121,8 @@ class PsychoacousticModel(BaseModel):
     }
     level = "frame"
     labels = {
-        "default": {"interpretability": "nameable", "derivation": "formula"},
+        "default": {"interpretability": "nameable", "derivation": "formula",
+                    "window_sec": "grid"},
         "columns": {
             "psychoacoustic_loudness": {
                 "LongName": "Zwicker loudness",
@@ -137,6 +138,7 @@ class PsychoacousticModel(BaseModel):
                 "Description": "Daniel & Weber roughness (MoSQITo)",
                 "Units": "asper"},
             "psychoacoustic_fluctuation": {
+                "window_sec": FLUCT_WINDOW_SEC, "window_align": "centred",
                 "LongName": "Fluctuation strength (estimate)",
                 "Description": "Native Fastl-style estimate from specific-loudness envelope "
                                "modulation, calibrated to 1.0 at Fastl's 4 Hz reference; not a "

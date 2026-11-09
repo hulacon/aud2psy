@@ -59,6 +59,7 @@ class EBindAudioModel(BaseModel):
     level = "frame"
     labels = {
         "default": {
+            "window_sec": WINDOW_SEC, "window_align": "centred",
             "interpretability": "opaque",
             "derivation": "embedding",
             "Description": "EBind audio embedding dimension (1024-d, ImageBind audio trunk "

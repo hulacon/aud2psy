@@ -16,7 +16,8 @@ class SpectralModel(BaseModel):
                                  "spectral_flux", "spectral_zcr")
     level = "frame"
     labels = {
-        "default": {"interpretability": "nameable", "derivation": "formula"},
+        "default": {"interpretability": "nameable", "derivation": "formula",
+                    "window_sec": "grid"},
         "columns": {
             "spectral_centroid": {"LongName": "Spectral centroid", "Units": "Hz"},
             "spectral_bandwidth": {"LongName": "Spectral bandwidth", "Units": "Hz"},

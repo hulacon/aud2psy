@@ -15,7 +15,8 @@ class LoudnessModel(BaseModel):
     nulls = undefinable_trailing("loudness_rms", "loudness_db")
     level = "frame"
     labels = {
-        "default": {"interpretability": "nameable", "derivation": "formula"},
+        "default": {"interpretability": "nameable", "derivation": "formula",
+                    "window_sec": "grid"},
         "columns": {
             "loudness_rms": {
                 "LongName": "RMS amplitude",

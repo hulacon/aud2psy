@@ -48,7 +48,8 @@ class TimbreModel(BaseModel):
                                  "timbre_flatness")
     level = "frame"
     labels = {
-        "default": {"interpretability": "nameable", "derivation": "formula"},
+        "default": {"interpretability": "nameable", "derivation": "formula",
+                    "window_sec": "grid"},
         "columns": {
             **{f"timbre_mfcc_{i:02d}": {
                 "interpretability": "opaque",

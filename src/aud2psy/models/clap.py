@@ -73,6 +73,7 @@ class ClapModel(BaseModel):
     level = "frame"
     labels = {
         "default": {
+            "window_sec": WINDOW_SEC, "window_align": "centred",
             "interpretability": "opaque",
             "derivation": "embedding",
             "Description": "LAION-CLAP audio embedding dimension (512-d, L2-normalised, 10 s "
