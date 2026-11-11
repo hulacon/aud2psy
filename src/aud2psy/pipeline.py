@@ -128,7 +128,7 @@ def score_audio(
     source even if diarize also runs.
     ``words_csv``: likewise for ``speech_rate`` — an existing
     {stem}_transcript_words.csv instead of running ``transcribe``.
-    ``speech_gate``: how ``egemaps`` (voiced set) and ``speech_emotion`` find
+    ``speech_gate``: how ``egemaps`` (voiced set), ``speech_emotion`` and ``phonetics`` find
     speech — ``"diarize"`` (turn coverage; needs diarize or ``speakers_csv``)
     or ``"silero"`` (VAD probability, the pre-0.20 gate). See ``speech_gate``.
     """

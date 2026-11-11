@@ -24,6 +24,7 @@ def get_model_version(model_name: str) -> str:
         "music_emotion": ("transformers", None),
         "sound_events": ("transformers", None),
         "speech_emotion": ("transformers", None),
+        "phonetics": ("transformers", None),
         "egemaps": ("opensmile", None),
         "beats": ("beat_this", None),
         "diarize": ("pyannote.audio", None),

@@ -45,6 +45,7 @@ def inventory(model: str) -> list[str]:
     """Every column the model can write (feature tables and, for the event and
     segment models, the reserved columns of their own tables too)."""
     from aud2psy.models import (beats, clap, diarize, ebind_audio, egemaps, music_emotion,
+                                phonetics,
                                 sound_events, timbre, transcribe)
 
     fixed = {
@@ -68,6 +69,7 @@ def inventory(model: str) -> list[str]:
         "speech_emotion": ["speech_emotion_valence", "speech_emotion_arousal",
                            "speech_emotion_dominance"],
         "egemaps": list(egemaps.RAW_TO_CLEAN.values()),
+        "phonetics": list(phonetics.COLUMNS),
         "beats": list(beats.BEAT_COLUMNS),
         "diarize": list(diarize.TURN_COLUMNS),
         "conversation": ["conversation_n_speakers", "conversation_speech_fraction",
