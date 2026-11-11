@@ -27,6 +27,7 @@ MODEL_REGISTRY: dict[str, tuple[str, str, str]] = {
     "music_emotion": ("aud2psy.models.music_emotion", "MusicEmotionModel", "Musical valence/arousal (DEAM-trained probe on CLAP)"),
     "sound_events": ("aud2psy.models.sound_events", "SoundEventsModel", "16 zero-shot scene/event tags (CLAP prompt bank: laughter, music, sirens, ...)"),
     "speech_emotion": ("aud2psy.models.speech_emotion", "SpeechEmotionModel", "Vocal arousal/dominance/valence (wav2vec2 MSP-Podcast; VAD-gated)"),
+    "phonetics": ("aud2psy.models.phonetics", "PhoneticsModel", "Articulatory shares (manner, place, voicing, vowel quality), phone rate (wav2vec2 phone CTC, audio only; speech-gated)"),
     "egemaps": ("aud2psy.models.egemaps", "EgemapsModel", "25 eGeMAPS prosody/voice-quality LLDs (openSMILE; needs the [egemaps] extra)"),
     "beats": ("aud2psy.models.beats", "BeatsModel", "Beat/downbeat event table (beat_this; needs the [beats] extra)"),
     "diarize": ("aud2psy.models.diarize", "DiarizeModel", "Speaker turn table (pyannote community-1; needs the [diarize] extra + HF token)"),
@@ -87,7 +88,7 @@ def build_parser() -> argparse.ArgumentParser:
                              "the conversation model and the diarize speech gate, "
                              "instead of running diarize in the same call")
     parser.add_argument("--speech-gate", choices=SPEECH_GATES, default=DEFAULT_SPEECH_GATE,
-                        help="how egemaps (voiced set) and speech_emotion find speech: "
+                        help="how egemaps (voiced set), speech_emotion and phonetics find speech: "
                              "'diarize' = speaker turns cover >= 25%% of the window "
                              "(needs the diarize model or --speakers); 'silero' = mean "
                              "Silero VAD probability >= .25, the gate before 0.20.0 "
@@ -417,7 +418,7 @@ def main(argv: list[str] | None = None) -> int:
                 models.remove("conversation")
                 if args.speech_gate == "diarize":
                     print(
-                        "note: skipping egemaps and speech_emotion too (they gate on "
+                        "note: skipping egemaps, speech_emotion and phonetics too (they gate on "
                         "diarized speech; pass --speakers, or --speech-gate silero)",
                         file=sys.stderr,
                     )

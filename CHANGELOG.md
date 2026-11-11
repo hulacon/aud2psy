@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-11-11
+
+Minor release: one new model. Existing outputs are unchanged.
+
+### Added
+
+- **`phonetics`** frame model: articulatory content of speech from the audio
+  alone. A frozen phone recognizer (`facebook/wav2vec2-lv-60-espeak-cv-ft`,
+  revision pinned, Apache-2.0) gives 20 ms phone posteriors; a fixed lookup
+  table (`data/phonetics_phone_table.tsv`, table version 1, built by
+  `python -m aud2psy.models.phonetics_table` and checked against the parser in
+  the tests) maps its 392 tokens to manner, place, voicing and vowel quality.
+  21 columns per grid window: 7 manner shares, 8 place shares and the voiced
+  share of consonant mass, vowel height / backness / rounding, phone rate and
+  recognizer entropy. Speech-gated like `egemaps` (grid window; joins
+  `GATED_MODELS`); pauses inside speech give NaN shares and rate 0. Runs over
+  20 s chunks with 2 s context and skips chunks with no speech. Decoding reads
+  the checkpoint's `vocab.json` directly, so the `phonemizer` dependency of its
+  tokenizer is not needed. Labels: nameable, `formula-on-model` on the
+  checkpoint, window `grid`.
+- `scripts/validate_phonetics.py`: scores the recognizer against a forced
+  phone alignment (LibriSpeech + Montreal Forced Aligner TextGrids), per
+  reference phone segment (primary) and per frame.
+
 ## [0.22.0] - 2026-11-08
 
 Minor release. No output values change, so nothing needs re-extracting:

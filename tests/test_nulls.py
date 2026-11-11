@@ -28,7 +28,7 @@ KINDS = {"undefined", "undefinable", "missing"}
 # Offline frame models: the NaN-emitting ones plus the ones that must never NaN.
 OFFLINE = ["loudness", "pitch", "spectral", "onsets", "tonal", "rhythm", "timbre",
            "psychoacoustic", "speech", "egemaps"]
-WEIGHTED = ["clap", "music_emotion", "sound_events", "speech_emotion"]
+WEIGHTED = ["clap", "music_emotion", "sound_events", "speech_emotion", "phonetics"]
 
 
 def _signals():

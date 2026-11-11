@@ -101,6 +101,7 @@ speaker-identity tracking, use the `diarize` model (below).
 | `music_emotion` | frame | 2 | `music_emotion_valence`, `music_emotion_arousal` in [−1, 1]: DEAM-trained probe on CLAP embeddings. Discriminates affective levels between clips/sections (held-out song-level r = .71/.84); not a beat-to-beat tracker |
 | `sound_events` | frame | 16 | `sound_events_speech`, `_music`, `_singing`, `_laughter`, `_crying`, `_shouting`, `_crowd`, `_applause`, `_footsteps`, `_vehicle`, `_water`, `_wind`, `_animals`, `_gunshot_explosion`, `_siren_alarm`, `_thunder`: zero-shot cosine scores of each 10 s window against a text prompt bank in the CLAP space (see below) |
 | `speech_emotion` | frame | 3 | `speech_emotion_valence`, `_arousal`, `_dominance` (~0–1): vocal affect from [audeering's wav2vec2 MSP-Podcast model](https://huggingface.co/audeering/wav2vec2-large-robust-12-ft-emotion-msp-dim) in 4 s windows; NaN where the window isn't speech ([speech gate](#speech-gate)). Weights are CC-BY-NC-SA (research use) |
+| `phonetics` | frame | 21 | Articulatory content of speech from the audio alone: manner shares (`phonetics_stop` … `_vowel`), place shares of consonant mass (`phonetics_labial` … `_glottal`), `phonetics_voiced`, vowel height / backness / rounding, `phonetics_rate` (phones/s), `phonetics_entropy` (bits), from a wav2vec2 phone recognizer ([`facebook/wav2vec2-lv-60-espeak-cv-ft`](https://huggingface.co/facebook/wav2vec2-lv-60-espeak-cv-ft), Apache-2.0) through a fixed phone → feature table; NaN where the window isn't speech ([speech gate](#speech-gate)) |
 | `egemaps` | frame | 25 | the 25 [eGeMAPS](https://audeering.github.io/opensmile/) v02 low-level descriptors via openSMILE: `egemaps_loudness`, spectral balance (`_alpha_ratio`, `_hammarberg`, `_slope_0_500`, `_slope_500_1500`, `_flux`), `_mfcc1`–`4`, and a voiced set (`_f0_semitone`, `_jitter`, `_shimmer`, `_hnr`, `_h1_h2`, `_h1_a3`, formant `_f1/f2/f3_freq/_bw/_amp`) that is NaN off-speech ([speech gate](#speech-gate)); needs `pip install "aud2psy[egemaps]"` |
 | `conversation` | frame | 6 | `conversation_n_speakers` (distinct speakers active in the window), `_speech_fraction`, `_overlap_fraction` (≥ 2 concurrent speakers — crosstalk), `_turn_rate`, `_switch_rate` (turn onsets / speaker changes per second), `_turn_duration` (time-weighted mean active-turn duration, s; NaN in silence) — derived from the `diarize` turn table, no audio model of its own (see below) |
 | `speech_rate` | frame | 3 | `speech_rate_words` (word onsets/s), `_word_duration` (time-weighted mean active-word duration, s; NaN where no word — the local articulation proxy), `_pauses` (within-utterance silent pauses/s, gap in [0.15, 2.0) s) — derived from the `transcribe` word timestamps; run with `transcribe`, or point at an existing table via `--words old_transcript_words.csv` |
@@ -170,9 +171,43 @@ sound (crowds, babble) is its worst-case interference. The weights are
 CC-BY-NC-SA 4.0 — free for research; commercial use needs a license from
 audEERING.
 
+## Phonetic features (phonetics)
+
+`phonetics` describes *what sounds* are being spoken, with no transcript: a
+frozen wav2vec2 phone recognizer (Xu, Baevski & Auli 2021; fine-tuned with CTC
+on CommonVoice espeak phone labels) gives a posterior over 392 multilingual
+phone tokens every 20 ms, and a fixed lookup table maps each token to its
+manner, place, voicing and vowel quality. Each grid window reports shares of
+its *phone mass* (the non-blank posterior): manner shares of all of it, place
+and voicing shares of its consonant mass, and mean vowel height / backness /
+rounding over its vowel mass. `phonetics_rate` counts phones per second from
+the greedy CTC decode (at a 0.5 s hop it moves in steps of 2/s; `speech_rate`
+carries a smooth word rate) and `phonetics_entropy` is the recognizer's
+uncertainty.
+
+The table ships as `data/phonetics_phone_table.tsv`, one row per token, and is
+regenerated with `python -m aud2psy.models.phonetics_table`. Its conventions:
+length, palatalisation, aspiration and tone marks are ignored; diphthongs and
+other multi-segment tokens split their mass across segments; taps (`ɾ`, the
+flapped t/d of American English) are stops; `w` is half labial, half velar;
+retroflex and alveolo-palatal count as postalveolar, uvular as velar.
+`scripts/validate_phonetics.py` scores the recognizer against a forced
+alignment of LibriSpeech.
+
+Because the recognizer is trained on transcribed speech, these columns encode
+the phonetic content of the words by construction, but they never read a
+transcript. Windows that are not speech are NaN, and inside speech a pause
+(under one frame of phone mass) has NaN shares and rate 0. The recognizer
+reads 20 s chunks with 2 s of context either side and skips chunks with no
+speech.
+
+```bash
+aud2psy diarize phonetics film.mp4 -o out/film.csv
+```
+
 ## Speech gate
 
-`egemaps`' voiced set and `speech_emotion` are NaN on windows that are not
+`egemaps`' voiced set, `speech_emotion` and `phonetics` are NaN on windows that are not
 speech. Two gates decide that, chosen per call with `--speech-gate`:
 
 | gate | a window is speech when | needs |
@@ -180,8 +215,8 @@ speech. Two gates decide that, chosen per call with `--speech-gate`:
 | `diarize` (default since 0.20.0) | pyannote speaker turns cover ≥ 25 % of it | `diarize` in the same call, or `--speakers {stem}_speakers.csv` |
 | `silero` (the gate before 0.20.0) | its mean Silero VAD speech probability is ≥ 0.25 | nothing extra |
 
-The window is each model's own: the grid window for `egemaps`, the 4 s
-context window for `speech_emotion`. Silero under-calls speech that overlaps
+The window is each model's own: the grid window for `egemaps` and
+`phonetics`, the 4 s context window for `speech_emotion`. Silero under-calls speech that overlaps
 music or background noise, the usual case in film audio; diarized turns keep
 those windows, at the cost of also firing on some non-speech vocal sound
 (laughter, singing). A gated model run without a turn table fails rather
@@ -444,6 +479,7 @@ models you used:
 - **LAION-CLAP** (`clap`, `sound_events`, and the embedding basis of `music_emotion`): Wu, Y., Chen, K., Zhang, T., Hui, Y., Berg-Kirkpatrick, T., & Dubnov, S. (2023). Large-scale contrastive language-audio pretraining with feature fusion and keyword-to-caption augmentation. *ICASSP 2023*. [arXiv:2211.06687](https://arxiv.org/abs/2211.06687)
 - **EBind** (`ebind_audio`): Broadbent, J., Cohen, F., Hvilshøj, F., Landau, E., & Sasoglu, E. (2025). EBind: A practical approach to space binding. [arXiv:2511.14229](https://arxiv.org/abs/2511.14229). Its audio trunk comes from ImageBind: Girdhar, R., et al. (2023). ImageBind: One embedding space to bind them all. *CVPR 2023*. [arXiv:2305.05665](https://arxiv.org/abs/2305.05665)
 - **DEAM** (the training data of `music_emotion`'s probe): Aljanaki, A., Yang, Y.-H., & Soleymani, M. (2017). Developing a benchmark for emotional analysis of music. *PLoS ONE, 12*(3), e0173392. [doi:10.1371/journal.pone.0173392](https://doi.org/10.1371/journal.pone.0173392)
+- **Phone recognizer** (`phonetics`): Xu, Q., Baevski, A., & Auli, M. (2021). Simple and effective zero-shot cross-lingual phoneme recognition. [arXiv:2109.11680](https://arxiv.org/abs/2109.11680)
 - **Vocal affect model** (`speech_emotion`): Wagner, J., et al. (2023). Dawn of the transformer era in speech emotion recognition: Closing the valence gap. *IEEE TPAMI, 45*(9), 10745–10759. [arXiv:2203.07378](https://arxiv.org/abs/2203.07378)
 - **eGeMAPS / openSMILE** (`egemaps`): Eyben, F., et al. (2016). The Geneva minimalistic acoustic parameter set (GeMAPS) for voice research and affective computing. *IEEE Transactions on Affective Computing, 7*(2), 190–202. [doi:10.1109/TAFFC.2015.2457417](https://doi.org/10.1109/TAFFC.2015.2457417); Eyben, F., Wöllmer, M., & Schuller, B. (2010). openSMILE: The Munich versatile and fast open-source audio feature extractor. *ACM Multimedia 2010*. [doi:10.1145/1873951.1874246](https://doi.org/10.1145/1873951.1874246)
 - **Beat This!** (`beats`): Foscarin, F., Schlüter, J., & Widmer, G. (2024). Beat this! Accurate beat tracking without DBN postprocessing. *ISMIR 2024*. [arXiv:2407.21658](https://arxiv.org/abs/2407.21658)

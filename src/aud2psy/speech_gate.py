@@ -1,4 +1,4 @@
-"""The speech gate shared by the speech-only frame models (egemaps' voiced set, speech_emotion).
+"""The speech gate shared by the speech-only frame models (egemaps' voiced set, speech_emotion, phonetics).
 
 A gated model's columns are NaN on a window that is not speech: "jitter" on a
 violin line is not voice quality, and the affect model invents affect on music.
@@ -35,7 +35,7 @@ if TYPE_CHECKING:  # pandas stays out of `aud2psy --help` (the CLI imports this 
 SPEECH_GATES = ("diarize", "silero")
 DEFAULT_SPEECH_GATE = "diarize"
 GATE_MIN_SPEECH = 0.25  # min covered fraction (diarize) / mean probability (silero)
-GATED_MODELS = ("egemaps", "speech_emotion")
+GATED_MODELS = ("egemaps", "speech_emotion", "phonetics")
 VAD_WINDOW = 512  # samples per Silero probability at 16 kHz
 
 _MEASURE = {
