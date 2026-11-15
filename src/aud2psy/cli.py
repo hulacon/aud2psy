@@ -105,7 +105,10 @@ def build_parser() -> argparse.ArgumentParser:
                         help="batch manifest: a CSV with a `path` column and "
                              "optional `stimulus_id` and `output` columns. The "
                              "way to batch when stimulus_id differs per file "
-                             "(--stimulus-id applies one value to every row)")
+                             "(--stimulus-id applies one value to every row). "
+                             "Optional `speakers` / `words` columns name each "
+                             "input's stored diarize turn table / transcribe word "
+                             "table, the per-file --speakers / --words")
     parser.add_argument("--list-models", action="store_true", help="list registered models and exit")
     parser.add_argument("--version", action="version", version=_version())
     return parser
@@ -360,6 +363,8 @@ def main(argv: list[str] | None = None) -> int:
     # leading tokens that name a model are models, everything after is a file.
     # Positional splitting cannot express more than one input.
     batch_rows: list[dict] | None = None
+    row_speakers: list[str] | None = None
+    row_words: list[str] | None = None
     if args.inputs_from:
         import csv as _csv
 
@@ -371,6 +376,15 @@ def main(argv: list[str] | None = None) -> int:
             parser.error(f"--inputs-from {args.inputs_from} needs a `path` column "
                          f"(got: {', '.join(batch_rows[0])})")
         input_paths = [r["path"] for r in batch_rows]
+        # per-row producer tables (0.24.0): each input's own stored turns / words
+        for col in ("speakers", "words"):
+            if col in batch_rows[0]:
+                empty = [i for i, r in enumerate(batch_rows) if not (r.get(col) or "").strip()]
+                if empty:
+                    parser.error(f"--inputs-from {args.inputs_from}: a `{col}` column must name a "
+                                 f"table on every row; rows {empty[:5]} are empty")
+        row_speakers = [r["speakers"] for r in batch_rows] if "speakers" in batch_rows[0] else None
+        row_words = [r["words"] for r in batch_rows] if "words" in batch_rows[0] else None
         models = list(args.inputs)
         stray = [m for m in models if m not in MODEL_REGISTRY]
         if stray:
@@ -409,7 +423,7 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
             models.remove("diarize")
-            if not args.speakers:
+            if not (args.speakers or row_speakers):
                 print(
                     "note: skipping conversation too (it derives from the "
                     "diarize turn table; pass --speakers to keep it)",
@@ -453,29 +467,41 @@ def main(argv: list[str] | None = None) -> int:
     if args.num_speakers and "diarize" not in models:
         parser.error("--num-speakers requires the diarize model")
     gate_reads_turns = args.speech_gate == "diarize" and any(m in GATED_MODELS for m in models)
+    have_turns = bool(args.speakers or row_speakers)
+    have_words = bool(args.words or row_words)
     if args.speakers and "conversation" not in models and not gate_reads_turns:
         parser.error("--speakers requires the conversation model or a diarize-gated "
                      f"model ({', '.join(GATED_MODELS)} with --speech-gate diarize)")
-    if args.speakers and "diarize" in models:
-        parser.error("--speakers replaces the diarize run as the turn source; drop "
-                     "diarize or drop --speakers")
-    if gate_reads_turns and "diarize" not in models and not args.speakers:
+    if row_speakers and "conversation" not in models and not gate_reads_turns:
+        parser.error("a `speakers` manifest column requires the conversation model or a "
+                     f"diarize-gated model ({', '.join(GATED_MODELS)} with --speech-gate diarize)")
+    if args.speakers and row_speakers:
+        parser.error("--speakers and a `speakers` manifest column are two turn sources; use one")
+    if have_turns and "diarize" in models:
+        parser.error("--speakers / a `speakers` column replaces the diarize run as the turn "
+                     "source; drop diarize or drop the stored turns")
+    if gate_reads_turns and "diarize" not in models and not have_turns:
         gated = ", ".join(m for m in models if m in GATED_MODELS)
         parser.error(f"{gated} gate on diarized speech (--speech-gate diarize, the "
                      "default since 0.20.0): add the diarize model, pass --speakers "
                      "existing_speakers.csv, or use --speech-gate silero")
-    if "conversation" in models and "diarize" not in models and not args.speakers:
+    if "conversation" in models and "diarize" not in models and not have_turns:
         parser.error("conversation derives from the diarize turn table; add the "
                      "diarize model, or pass --speakers existing_speakers.csv")
     if args.speakers and len(input_paths) > 1:
         parser.error("--speakers maps one turn table onto one input; with several "
-                     "inputs run diarize in the same call instead")
+                     "inputs give each its own in a `speakers` column of an "
+                     "--inputs-from manifest, or run diarize in the same call")
     if args.words and "speech_rate" not in models:
         parser.error("--words requires the speech_rate model")
-    if args.words and "transcribe" in models:
-        parser.error("--words replaces the transcribe run as the speech_rate "
-                     "model's word source; drop transcribe or drop --words")
-    if "speech_rate" in models and "transcribe" not in models and not args.words:
+    if row_words and "speech_rate" not in models:
+        parser.error("a `words` manifest column requires the speech_rate model")
+    if args.words and row_words:
+        parser.error("--words and a `words` manifest column are two word sources; use one")
+    if have_words and "transcribe" in models:
+        parser.error("--words / a `words` column replaces the transcribe run as the speech_rate "
+                     "model's word source; drop transcribe or drop the stored words")
+    if "speech_rate" in models and "transcribe" not in models and not have_words:
         parser.error("speech_rate derives from the transcribe word timestamps; "
                      "add the transcribe model, or pass --words "
                      "existing_transcript_words.csv")
@@ -488,7 +514,8 @@ def main(argv: list[str] | None = None) -> int:
     batched = batch_rows is not None or len(input_paths) > 1
     if args.words and batched:
         parser.error("--words maps one word table onto one input; with a manifest or "
-                     "several inputs run speech_rate together with transcribe instead")
+                     "several inputs give each its own in a `words` manifest column, or "
+                     "run speech_rate together with transcribe")
 
     from .exceptions import Aud2PsyError
     from .pipeline import save_result, score_audio, score_audio_batch
@@ -534,6 +561,8 @@ def main(argv: list[str] | None = None) -> int:
                 num_speakers=args.num_speakers,
                 verbatim=args.verbatim,
                 speech_gate=args.speech_gate,
+                speakers_csvs=row_speakers,
+                words_csvs=row_words,
             )
         except Aud2PsyError as exc:
             print(f"error: {exc}", file=sys.stderr)

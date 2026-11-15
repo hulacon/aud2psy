@@ -153,6 +153,12 @@ HF token), which is the cheap path when diarization already ran. The
 sidecar records the turn source either way. Everything is derived from
 the raw turn table, so the two routes give identical values.
 
+In a batch (`--inputs-from`), give each input its own stored table in a
+`speakers` column (and `speech_rate` its own word table in a `words`
+column); one `--speakers` table cannot map onto several inputs. The
+diarize speech gate of `egemaps`, `speech_emotion` and `phonetics` reads
+the same column.
+
 ## Vocal affect (speech_emotion)
 
 `speech_emotion` scores *how* speech sounds — dimensional

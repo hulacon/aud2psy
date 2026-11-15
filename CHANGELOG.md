@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.24.0] - 2026-11-14
+
+Minor release: batches take stored producer tables per input. Existing outputs
+are unchanged.
+
+### Added
+
+- **Per-file turn and word sources in a batch.** `score_audio_batch` takes
+  `speakers_csvs` / `words_csvs` (one stored table per input, in input order),
+  and an `--inputs-from` manifest takes `speakers` / `words` columns. Each
+  input's `conversation`, diarize speech gate (`egemaps`, `speech_emotion`,
+  `phonetics`) and `speech_rate` then read that input's own `*_speakers.csv` /
+  `*_transcript_words.csv`, as `--speakers` / `--words` do for one file. Until
+  now these models could run in a batch only with diarize / transcribe in the
+  same call, because one table cannot map onto several inputs. This lets many
+  short items be scored with each model loaded once while each consumer reads
+  its item's stored producer output (psytwill per-item fit corpora). The
+  sidecar's `turns_source`, `speech_gate_turns_source` and `words_source` name
+  each input's own table.
+- A stored source and its producer in the same call are refused (two turn or
+  word sources), as on the single-file path; a manifest column must name a
+  table on every row.
+
 ## [0.23.0] - 2026-11-11
 
 Minor release: one new model. Existing outputs are unchanged.

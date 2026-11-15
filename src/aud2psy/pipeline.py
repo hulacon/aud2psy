@@ -409,6 +409,8 @@ def score_audio_batch(
     verbatim: bool = False,
     speech_gate: str = DEFAULT_SPEECH_GATE,
     show_progress: bool = True,
+    speakers_csvs: list[str | Path] | None = None,
+    words_csvs: list[str | Path] | None = None,
 ) -> list[ScoreResult]:
     """Run the named models over many files, loading each model ONCE.
 
@@ -436,6 +438,15 @@ def score_audio_batch(
     than once per batch (bounded memory beats a decode cache here), so for long
     inputs the repeated decode can outweigh the saved loads -- use
     ``score_audio`` per file for movie-length audio.
+
+    ``speakers_csvs`` / ``words_csvs`` (0.24.0): one stored producer table per
+    input, in input order -- each file's ``*_speakers.csv`` (diarize turns,
+    for ``conversation`` and the diarize speech gate) or
+    ``*_transcript_words.csv`` (for ``speech_rate``). Without them those
+    models need their producer in the same call, as before: one table cannot
+    map onto several inputs, but one table per input can. A stored source and
+    its producer in the same call are refused (two turn sources, and which fed
+    the gate would be implicit).
     """
     from tqdm import tqdm
 
@@ -457,25 +468,35 @@ def score_audio_batch(
     do_diarize = "diarize" in models
     do_conversation = "conversation" in models
     do_speech_rate = "speech_rate" in models
-    if do_conversation and not do_diarize:
-        from .exceptions import Aud2PsyError
+    from .exceptions import Aud2PsyError
 
+    for name, given in (("speakers_csvs", speakers_csvs), ("words_csvs", words_csvs)):
+        if given is not None and len(given) != len(paths):
+            raise Aud2PsyError(f"{name} holds {len(given)} table(s) for {len(paths)} inputs; "
+                               "give one per input, in input order")
+    if speakers_csvs is not None and do_diarize:
+        raise Aud2PsyError("stored turn tables (speakers_csvs) and a diarize run in the same "
+                           "call are two turn sources; drop diarize or drop speakers_csvs")
+    if words_csvs is not None and do_transcribe:
+        raise Aud2PsyError("stored word tables (words_csvs) and a transcribe run in the same "
+                           "call are two word sources; drop transcribe or drop words_csvs")
+    if do_conversation and not do_diarize and speakers_csvs is None:
         raise Aud2PsyError(
             "in a batch, the conversation model needs diarize in the same call "
-            "(a single speakers_csv cannot map onto several inputs)"
+            "(a single speakers_csv cannot map onto several inputs), or one "
+            "stored turn table per input (speakers_csvs; CLI: a `speakers` "
+            "manifest column)"
         )
-    if do_speech_rate and not do_transcribe:
-        from .exceptions import Aud2PsyError
-
+    if do_speech_rate and not do_transcribe and words_csvs is None:
         raise Aud2PsyError(
             "in a batch, the speech_rate model needs transcribe in the same "
-            "call (a single words_csv cannot map onto several inputs)"
+            "call (a single words_csv cannot map onto several inputs), or one "
+            "stored word table per input (words_csvs; CLI: a `words` manifest "
+            "column)"
         )
     check_gate(speech_gate)
     gate_needs_turns = speech_gate == "diarize" and any(m in GATED_MODELS for m in frame_names)
-    if gate_needs_turns and not do_diarize:
-        from .exceptions import Aud2PsyError
-
+    if gate_needs_turns and not do_diarize and speakers_csvs is None:
         raise Aud2PsyError(_gate_without_turns(frame_names, batch=True))
 
     n = len(paths)
@@ -494,6 +515,14 @@ def score_audio_batch(
     transcript_df: list = [None] * n
     words_df: list = [None] * n
     recall_df: list = [None] * n
+    # the turn source each file's turn readers use: its stored table, or this run's diarize
+    turns: list = [None] * n
+    turns_source: list[str] = ["diarize (this run)"] * n
+    if speakers_csvs is not None and (do_conversation or gate_needs_turns):
+        from .models.conversation import load_turns_csv
+
+        turns = [load_turns_csv(s) for s in speakers_csvs]
+        turns_source = [str(s) for s in speakers_csvs]
 
     def _durations(sr: int) -> None:
         """Fill duration/grid on first need, from a decode at ``sr``."""
@@ -547,6 +576,7 @@ def score_audio_batch(
                 t_model = time.time()
                 speakers_df[i], exclusive_df[i], diarize_info[i] = model.diarize(
                     load_audio(p, WHISPER_SR), WHISPER_SR)
+                turns[i] = speakers_df[i]
                 model_meta[i]["diarize"] = {
                     "columns": list(speakers_df[i].columns),
                     "runtime_sec": round(time.time() - t_model, 2),
@@ -569,14 +599,14 @@ def score_audio_batch(
                     model.cache_ = {}  # per-file; see docstring
                 gate_turns = name in GATED_MODELS and speech_gate == "diarize"
                 if gate_turns:
-                    model.turns_ = speakers_df[i]
+                    model.turns_ = turns[i]
                 t_model = time.time()
                 feats = model.extract(load_audio(p, model_sr), model_sr, grids[i])
                 for feat, values in feats.items():
                     columns[i][feat] = values
                 _record(i, name, model, feats, t_model)
                 if gate_turns:
-                    model_meta[i][name]["speech_gate_turns_source"] = "diarize (this run)"
+                    model_meta[i][name]["speech_gate_turns_source"] = turns_source[i]
         finally:
             model.unload()
 
@@ -598,6 +628,7 @@ def score_audio_batch(
             model.unload()
 
     if do_conversation:
+        _durations(FEATURE_SR)  # stored turns: no diarize decode filled them
         model = get_model("conversation")
         model.load()
         try:
@@ -606,11 +637,11 @@ def score_audio_batch(
                 if grids[i] is None:
                     grids[i] = Grid.for_duration(duration[i], hop)
                     columns[i]["time"] = grids[i].centers
-                feats = model.derive(speakers_df[i], grids[i])
+                feats = model.derive(turns[i], grids[i])
                 for feat, values in feats.items():
                     columns[i][feat] = values
                 _record(i, "conversation", model, feats, t_model)
-                model_meta[i]["conversation"]["turns_source"] = "diarize (this run)"
+                model_meta[i]["conversation"]["turns_source"] = turns_source[i]
         finally:
             model.unload()
 
@@ -644,6 +675,14 @@ def score_audio_batch(
             model.unload()
 
     if do_speech_rate:
+        if words_csvs is not None:
+            from .models.speech_rate import load_words_csv
+
+            sr_words = [load_words_csv(w) for w in words_csvs]
+            words_source = [str(w) for w in words_csvs]
+        else:
+            sr_words, words_source = words_df, ["transcribe (this run)"] * n
+        _durations(FEATURE_SR)
         model = get_model("speech_rate")
         model.load()
         try:
@@ -652,11 +691,11 @@ def score_audio_batch(
                 if grids[i] is None:
                     grids[i] = Grid.for_duration(duration[i], hop)
                     columns[i]["time"] = grids[i].centers
-                feats = model.derive(words_df[i], grids[i])
+                feats = model.derive(sr_words[i], grids[i])
                 for feat, values in feats.items():
                     columns[i][feat] = values
                 _record(i, "speech_rate", model, feats, t_model)
-                model_meta[i]["speech_rate"]["words_source"] = "transcribe (this run)"
+                model_meta[i]["speech_rate"]["words_source"] = words_source[i]
         finally:
             model.unload()
 
